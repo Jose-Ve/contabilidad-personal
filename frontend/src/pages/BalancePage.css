@@ -1,0 +1,330 @@
+.balance {
+  display: grid;
+  gap: 2rem;
+  color: #d8f4ff;
+}
+
+.balance__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.balance__intro h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  color: #ffffff;
+}
+
+.balance__intro p {
+  margin: 0.45rem 0 0;
+  max-width: 520px;
+  line-height: 1.6;
+  color: rgba(111, 214, 255, 0.78);
+}
+
+.balance__overview {
+  display: grid;
+  gap: 0.35rem;
+  text-align: right;
+  padding: 1rem 1.6rem;
+  border-radius: 1.2rem;
+  background: linear-gradient(135deg, rgba(111, 214, 255, 0.18) 0%, rgba(83, 253, 215, 0.12) 100%);
+  border: 1px solid rgba(111, 214, 255, 0.18);
+  box-shadow: 0 24px 50px rgba(7, 26, 43, 0.45);
+  min-width: 240px;
+}
+
+.balance__overview-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: rgba(111, 214, 255, 0.78);
+}
+
+.balance__overview-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #6fd6ff;
+}
+
+.balance__overview-value.is-positive {
+  color: #53fdd7;
+}
+
+.balance__overview-value.is-negative {
+  color: #ff9aa2;
+}
+
+.balance__overview-detail {
+  font-size: 0.9rem;
+  color: rgba(216, 244, 255, 0.7);
+}
+
+.balance-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.balance-field {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 180px;
+}
+
+.balance-field span {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(216, 244, 255, 0.78);
+}
+
+.balance-input {
+  padding: 0.85rem 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid #1e293b;
+  background-color: #0f172a;
+  color: #f8fafc;
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.balance-input:focus {
+  outline: none;
+  border-color: #6fd6ff;
+  box-shadow: 0 0 0 3px rgba(111, 214, 255, 0.22);
+  background-color: #111d2f;
+}
+
+.balance-button {
+  padding: 0.9rem 1.8rem;
+  border-radius: 0.95rem;
+  border: none;
+  background: linear-gradient(135deg, rgba(111, 214, 255, 0.88) 0%, rgba(83, 253, 215, 0.72) 100%);
+  color: #071a2b;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 20px 40px rgba(111, 214, 255, 0.32);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.balance-button:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.balance-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.balance__loading {
+  margin: 0;
+  padding: 0.85rem 1.2rem;
+  border-radius: 0.95rem;
+  background: rgba(111, 214, 255, 0.12);
+  border: 1px solid rgba(111, 214, 255, 0.24);
+  color: rgba(216, 244, 255, 0.75);
+}
+
+.balance-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.balance-card {
+  border-radius: 1.5rem;
+  padding: 1.8rem;
+  background: radial-gradient(140% 140% at 12% 18%, rgba(111, 214, 255, 0.18) 0%, rgba(7, 26, 43, 0.92) 65%, rgba(7, 26, 43, 0.98) 100%);
+  border: 1px solid rgba(111, 214, 255, 0.2);
+  box-shadow: 0 28px 56px rgba(7, 26, 43, 0.45);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.balance-card__title {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(111, 214, 255, 0.78);
+}
+
+.balance-card__value {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.balance-card__value.is-positive {
+  color: #53fdd7;
+}
+
+.balance-card__value.is-negative {
+  color: #ff9aa2;
+}
+
+.balance-card__detail {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(216, 244, 255, 0.72);
+}
+
+.balance-monthly {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.balance-monthly__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.balance-monthly__header h2 {
+  margin: 0;
+  color: #ffffff;
+}
+
+.balance-monthly__header p {
+  margin: 0;
+  color: rgba(216, 244, 255, 0.72);
+  max-width: 540px;
+}
+
+.balance-monthly__selector {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.balance-monthly__chip {
+  border: 1px solid rgba(83, 253, 215, 0.28);
+  background: rgba(11, 30, 39, 0.65);
+  color: rgba(176, 255, 241, 0.85);
+  padding: 0.55rem 0.95rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  font-weight: 600;
+}
+
+.balance-monthly__chip:hover {
+  border-color: rgba(83, 253, 215, 0.45);
+  color: #ffffff;
+}
+
+.balance-monthly__chip.is-active {
+  background: linear-gradient(135deg, rgba(111, 214, 255, 0.92) 0%, rgba(83, 253, 215, 0.85) 100%);
+  color: #071a2b;
+  border-color: transparent;
+  box-shadow: 0 18px 36px rgba(83, 253, 215, 0.28);
+}
+
+.balance-monthly__chip-label {
+  text-transform: capitalize;
+}
+
+.balance-monthly__chip-count {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.balance-monthly__grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.balance-monthly__card {
+  border-radius: 1.4rem;
+  padding: 1.6rem;
+  background: radial-gradient(135% 135% at 15% 20%, rgba(111, 214, 255, 0.18) 0%, rgba(7, 26, 43, 0.92) 70%, rgba(7, 26, 43, 0.98) 100%);
+  border: 1px solid rgba(111, 214, 255, 0.18);
+  box-shadow: 0 28px 56px rgba(7, 26, 43, 0.45);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.balance-monthly__card--focus {
+  margin-top: 0.6rem;
+  max-width: 480px;
+}
+
+.balance-monthly__card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.balance-monthly__card h3 {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  color: #ffffff;
+}
+
+.balance-monthly__details {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.balance-monthly__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.balance-monthly__row dt {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(216, 244, 255, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.balance-monthly__row dd {
+  margin: 0;
+}
+
+.balance-monthly__number {
+  font-weight: 600;
+  color: #6fd6ff;
+}
+
+.balance-monthly__number.is-positive {
+  color: #53fdd7;
+}
+
+.balance-monthly__number.is-negative {
+  color: #ff9aa2;
+}
+
+.balance-monthly__empty {
+  margin: 0;
+  padding: 1rem 1.4rem;
+  border-radius: 1rem;
+  background: rgba(111, 214, 255, 0.12);
+  border: 1px solid rgba(111, 214, 255, 0.2);
+  color: rgba(216, 244, 255, 0.72);
+}
+
+@media (max-width: 720px) {
+  .balance__overview {
+    text-align: left;
+  }
+}

@@ -17,6 +17,7 @@ Esta guía describe cómo preparar el repositorio, crear el proyecto en Supabase
    git remote add origin https://github.com/TU_USUARIO/contabilidad-personal.git
    git add .
    git commit -m "chore: estructura inicial"
+   git branch -M main
    git push -u origin main
    ```
    > Asegúrate de sustituir `TU_USUARIO` por tu nombre de usuario real y autenticarte cuando Git lo pida.
