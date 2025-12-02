@@ -92,6 +92,18 @@ function LoginPage() {
     return () => window.clearInterval(timer);
   }, [lockState.lockedUntil, emailValue, isLocked]);
 
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   if (user && !suppressRedirect) {
     return (
       <div
@@ -172,18 +184,6 @@ function LoginPage() {
     setLockState({ ...EMPTY_LOCK_STATE });
     navigate('/dashboard', { replace: true });
   };
-
-  useEffect(() => {
-    if (!toast) {
-      return undefined;
-    }
-
-    const timer = setTimeout(() => {
-      setToast(null);
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   const handleResendVerification = async () => {
     if (!unconfirmedEmail) {
