@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Ajustar "base" al nombre real del repositorio para GitHub Pages
+// Usamos la raíz para que los assets se resuelvan bien en Netlify
 export default defineConfig({
-  base: '/contabilidad-personal/',
+  base: '/',
   plugins: [react()],
   server: {
     port: 5173,
