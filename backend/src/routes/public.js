@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { supabaseAdmin } from '../lib/supabase.js';
+import { supabaseAdmin, findAuthUserByEmail } from '../lib/supabase.js';
 import { config } from '../env.js';
 import { parseWithSchema } from '../utils/validation.js';
 
@@ -104,9 +104,10 @@ export default async function publicRoutes(fastify) {
   fastify.post('/register/resend', async (request, reply) => {
     const { email } = parseWithSchema(resendSchema, request.body ?? {});
 
-    const { data: existingUser, error: lookupError } = await supabaseAdmin.auth.admin.getUserByEmail(email);
-
-    if (lookupError) {
+    let existingUser = null;
+    try {
+      existingUser = await findAuthUserByEmail(email);
+    } catch (lookupError) {
       request.log.error(lookupError, 'Error buscando usuario para reenviar confirmación');
       return reply.code(500).send({ message: 'No pudimos reenviar el correo. Inténtalo más tarde.' });
     }

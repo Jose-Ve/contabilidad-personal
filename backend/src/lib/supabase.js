@@ -11,6 +11,25 @@ export const supabaseAdmin = createClient(config.supabaseUrl, config.supabaseSer
 const EXTENDED_PROFILE_COLUMNS = 'id, email, full_name, first_name, last_name, gender, role, deleted_at';
 const BASIC_PROFILE_COLUMNS = 'id, email, full_name, role, deleted_at';
 
+export async function findAuthUserByEmail(email) {
+  const normalizedEmail = email?.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+    page: 1,
+    perPage: 200,
+    email: normalizedEmail
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data?.users?.find((user) => user.email?.toLowerCase() === normalizedEmail) ?? null;
+}
+
 export async function getProfileById(userId) {
   const { data, error } = await supabaseAdmin
     .from('profiles')
