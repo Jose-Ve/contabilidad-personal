@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin';
-import { supabaseAdmin, ensureProfileExists } from '../lib/supabase.js';
+import { ensureProfileExists, getAuthUserByAccessToken } from '../lib/supabase.js';
 
 function buildUnauthorized(reply, message = 'No autorizado') {
   return reply.code(401).send({ message });
@@ -17,13 +17,12 @@ export default fp(async function authPlugin(fastify) {
       return buildUnauthorized(reply, 'Formato de token inválido');
     }
 
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user) {
+    const { user, error } = await getAuthUserByAccessToken(token);
+    if (error || !user) {
       fastify.log.warn({ error }, 'Token inválido');
       return buildUnauthorized(reply, 'Sesión inválida');
     }
 
-    const user = data.user;
     const profile = await ensureProfileExists({ id: user.id, email: user.email });
 
     if (profile?.deleted_at) {

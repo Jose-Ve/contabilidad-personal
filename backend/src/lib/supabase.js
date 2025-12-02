@@ -30,6 +30,32 @@ export async function findAuthUserByEmail(email) {
   return data?.users?.find((user) => user.email?.toLowerCase() === normalizedEmail) ?? null;
 }
 
+export async function getAuthUserByAccessToken(accessToken) {
+  const token = accessToken?.trim();
+  if (!token) {
+    return { user: null, error: new Error('missing_access_token') };
+  }
+
+  const response = await fetch(`${config.supabaseUrl}/auth/v1/user`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: config.supabaseServiceRoleKey
+    }
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const error = new Error(payload?.error_description ?? payload?.msg ?? 'invalid_token');
+    error.status = response.status;
+    error.payload = payload;
+    return { user: null, error };
+  }
+
+  const user = await response.json();
+  return { user, error: null };
+}
+
 export async function getProfileById(userId) {
   const { data, error } = await supabaseAdmin
     .from('profiles')
