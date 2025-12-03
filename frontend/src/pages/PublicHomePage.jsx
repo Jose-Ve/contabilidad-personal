@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import logo from '../assets/logo.png';
+import './PublicHomePage.css';
 
 const navLinks = [
   { label: 'Inicio', href: '#inicio' },
@@ -25,198 +27,119 @@ const trustBadges = ['Equipos contables', 'Negocios de servicios', 'Consultores 
 
 function PublicHomePage() {
   const { user } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   if (user) {
     return <Navigate to="/dashboard" replace />;
   }
 
+  const toggleMenu = () => {
+    setMenuOpen((prev) => !prev);
+  };
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+  };
+
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4rem',
-        padding: '2.5rem clamp(1.5rem, 6vw, 4.25rem)',
-        color: '#e2e8f0'
-      }}
-    >
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '2rem',
-          flexWrap: 'wrap'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <div
-            style={{
-              width: '54px',
-              height: '54px',
-              borderRadius: '1rem',
-              background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.6), rgba(14, 165, 233, 0.1))',
-              display: 'grid',
-              placeItems: 'center'
-            }}
-          >
-            <img src={logo} alt="Panel Contable" style={{ width: '36px', height: '36px', borderRadius: '0.75rem' }} />
+    <main className="landing-main">
+      <header className="landing-header">
+        <div className="landing-brand">
+          <div className="landing-brand-icon">
+            <img src={logo} alt="Panel Contable" className="landing-brand-logo" />
           </div>
-          <div>
-            <strong style={{ fontSize: '1.15rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Panel Contable</strong>
-            <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(226, 232, 240, 0.65)' }}>Finanzas en tiempo real</p>
+          <div className="landing-brand-copy">
+            <strong>Panel Contable</strong>
+            <p>Finanzas en tiempo real</p>
           </div>
         </div>
 
-        <nav style={{ display: 'flex', gap: '1.75rem', flexWrap: 'wrap' }}>
-          {navLinks.map((link) => (
-            <a key={link.label} href={link.href} style={{ color: 'rgba(226, 232, 240, 0.72)', textDecoration: 'none', fontWeight: 500 }}>
-              {link.label}
-            </a>
-          ))}
+        <button
+          type="button"
+          className="landing-menu-toggle"
+          aria-expanded={menuOpen}
+          aria-controls="landing-nav"
+          aria-label={menuOpen ? 'Cerrar menú de navegación' : 'Abrir menú de navegación'}
+          onClick={toggleMenu}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </button>
+
+        <nav className={`landing-nav${menuOpen ? ' is-open' : ''}`} id="landing-nav">
+          <div className="landing-nav-links">
+            {navLinks.map((link) => (
+              <a key={link.label} href={link.href} className="landing-nav-link" onClick={closeMenu}>
+                {link.label}
+              </a>
+            ))}
+          </div>
+          <div className="landing-auth">
+            <Link to="/login" className="landing-auth-button landing-auth-button--outline" onClick={closeMenu}>
+              Iniciar sesión
+            </Link>
+            <Link to="/register" className="landing-auth-button landing-auth-button--primary" onClick={closeMenu}>
+              Crear cuenta
+            </Link>
+          </div>
         </nav>
-
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <Link
-            to="/login"
-            style={{
-              padding: '0.7rem 1.4rem',
-              borderRadius: '999px',
-              border: '1px solid rgba(148, 163, 184, 0.4)',
-              color: '#e2e8f0',
-              textDecoration: 'none',
-              fontWeight: 600
-            }}
-          >
-            Iniciar sesión
-          </Link>
-          <Link
-            to="/register"
-            style={{
-              padding: '0.7rem 1.6rem',
-              borderRadius: '999px',
-              background: 'linear-gradient(135deg, #38bdf8 0%, #22d3ee 40%, #34d399 100%)',
-              color: '#020617',
-              textDecoration: 'none',
-              fontWeight: 700,
-              boxShadow: '0 18px 35px rgba(56, 189, 248, 0.35)'
-            }}
-          >
-            Crear cuenta
-          </Link>
-        </div>
       </header>
 
-      <section
-        id="inicio"
-        style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          alignItems: 'center',
-          gap: '3rem'
-        }}
-      >
-        <div style={{ display: 'grid', gap: '1.75rem' }}>
-          <div style={{ display: 'grid', gap: '1rem' }}>
-            <span style={{ fontWeight: 600, color: '#38bdf8', letterSpacing: '0.28em', textTransform: 'uppercase' }}>Finanzas claras</span>
-            <h1 style={{ margin: 0, fontSize: 'clamp(2.8rem, 4vw, 4.35rem)', lineHeight: 1.05 }}>
+      <section className="landing-hero" id="inicio">
+        <div className="landing-hero-content">
+          <div className="landing-hero-copy">
+            <span className="landing-eyebrow">Finanzas claras</span>
+            <h1 className="landing-title">
               Centraliza ingresos y gastos.
               <br />
               Exporta reportes sin hojas sueltas.
             </h1>
-            <p style={{ margin: 0, maxWidth: '560px', color: 'rgba(226, 232, 240, 0.75)', fontSize: '1.1rem', lineHeight: 1.7 }}>
-              Panel Contable reúne tus registros contables en un solo lugar: captura movimientos, visualiza métricas en C$ y USD, y descarga reportes listos para tus cierres mensuales.
+            <p className="landing-description">
+              Panel Contable reúne tus registros contables en un solo lugar: captura movimientos, visualiza métricas en C$ y USD, y
+              descarga reportes listos para tus cierres mensuales.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <Link
-              to="/register"
-              style={{
-                padding: '0.95rem 2.25rem',
-                borderRadius: '1rem',
-                background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.9), rgba(45, 212, 191, 0.85))',
-                color: '#020617',
-                textDecoration: 'none',
-                fontWeight: 700,
-                boxShadow: '0 22px 40px rgba(56, 189, 248, 0.32)'
-              }}
-            >
+
+          <div className="landing-cta">
+            <Link to="/register" className="landing-cta-button landing-cta-button--primary">
               Probar Panel
             </Link>
-            <Link
-              to="/login"
-              style={{
-                padding: '0.95rem 2.25rem',
-                borderRadius: '1rem',
-                border: '1px solid rgba(148, 163, 184, 0.45)',
-                color: '#e2e8f0',
-                textDecoration: 'none',
-                fontWeight: 600,
-                backgroundColor: 'rgba(15, 23, 42, 0.35)'
-              }}
-            >
+            <Link to="/login" className="landing-cta-button landing-cta-button--outline">
               Ver demo en vivo
             </Link>
           </div>
 
-          <ul id="funcionalidades" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '1rem' }}>
+          <ul className="landing-feature-list" id="funcionalidades">
             {featureBullets.map((item) => (
-              <li key={item} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'rgba(226, 232, 240, 0.8)' }}>
-                <span
-                  aria-hidden
-                  style={{
-                    width: '14px',
-                    height: '14px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #38bdf8, #34d399)',
-                    boxShadow: '0 0 12px rgba(56, 189, 248, 0.55)'
-                  }}
-                />
+              <li key={item} className="landing-feature-item">
+                <span className="landing-feature-dot" aria-hidden="true" />
                 {item}
               </li>
             ))}
           </ul>
         </div>
 
-        <aside
-          style={{
-            borderRadius: '2rem',
-            background: 'linear-gradient(160deg, rgba(56, 189, 248, 0.12), rgba(37, 99, 235, 0.08) 45%, rgba(15, 118, 110, 0.16))',
-            padding: '2.75rem 2.5rem',
-            display: 'grid',
-            gap: '2rem',
-            boxShadow: '0 30px 80px rgba(15, 118, 110, 0.25)'
-          }}
-        >
-          <div style={{ display: 'grid', gap: '0.65rem' }}>
-            <h2 style={{ margin: 0, fontSize: '1.9rem' }}>Lo que obtienes hoy</h2>
-            <p style={{ margin: 0, color: 'rgba(226, 232, 240, 0.75)' }}>
+        <aside className="landing-card" id="reportes">
+          <div className="landing-card-header">
+            <h2 className="landing-card-title">Lo que obtienes hoy</h2>
+            <p className="landing-card-description">
               Control del flujo contable, indicadores comprensibles y documentos listos para enviar a tu equipo o auditor.
             </p>
           </div>
 
-          <div style={{ display: 'grid', gap: '1.25rem' }}>
+          <div className="landing-card-items">
             {spotlightCards.map((feature) => (
-              <article
-                key={feature.title}
-                style={{
-                  backgroundColor: 'rgba(15, 23, 42, 0.55)',
-                  borderRadius: '1.35rem',
-                  padding: '1.5rem',
-                  border: '1px solid rgba(56, 189, 248, 0.18)'
-                }}
-              >
-                <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#38bdf8' }}>{feature.title}</h3>
-                <p style={{ margin: '0.35rem 0 0', color: 'rgba(226, 232, 240, 0.75)' }}>{feature.detail}</p>
+              <article key={feature.title} className="landing-card-item">
+                <h3>{feature.title}</h3>
+                <p>{feature.detail}</p>
               </article>
             ))}
           </div>
 
-          <div id="reportes" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.9rem', color: 'rgba(226, 232, 240, 0.6)' }}>Ideal para:</span>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontWeight: 600, color: 'rgba(226, 232, 240, 0.75)' }}>
+          <div className="landing-card-badges">
+            <span className="landing-card-badges-label">Ideal para:</span>
+            <div className="landing-card-badges-list">
               {trustBadges.map((badge) => (
                 <span key={badge}>{badge}</span>
               ))}
@@ -225,12 +148,10 @@ function PublicHomePage() {
         </aside>
       </section>
 
-      <footer id="seguridad" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', fontSize: '0.85rem', color: 'rgba(226, 232, 240, 0.55)' }}>
-        <p style={{ margin: 0 }}>© {new Date().getFullYear()} Panel Contable. Control financiero práctico.</p>
-        <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-          <a href="mailto:soporte@panelcontable.com" style={{ color: 'inherit', textDecoration: 'none' }}>
-            soporte@panelcontable.com
-          </a>
+      <footer className="landing-footer" id="seguridad">
+        <p>© {new Date().getFullYear()} Panel Contable. Control financiero práctico.</p>
+        <div className="landing-footer-links">
+          <a href="mailto:soporte@panelcontable.com">soporte@panelcontable.com</a>
           <span>Manual de uso</span>
           <span>Política de seguridad</span>
         </div>

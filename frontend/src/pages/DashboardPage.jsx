@@ -24,9 +24,9 @@ const formatCurrency = (value, currency = 'NIO') =>
     maximumFractionDigits: 2
   }).format(Number(value ?? 0));
 
-const usdToCordobas = (value) => Number(value ?? 0) * EXCHANGE_RATE;
 const normalizeToCordobas = (amount, currency) =>
   currency === 'USD' ? Number(amount ?? 0) * EXCHANGE_RATE : Number(amount ?? 0);
+const nioToUsd = (value) => Number(value ?? 0) / EXCHANGE_RATE;
 
 const palette = ['#6fd6ff', '#53fdd7', '#4dd2ff', '#7bf0c3', '#5eb5ff', '#3fb29f', '#9ae8ff', '#5ad6c9'];
 
@@ -221,27 +221,27 @@ function DashboardPage() {
     const cards = [
       {
         title: 'Ingresos totales',
-        value: formatCurrency(usdToCordobas(summary.incomes.total)),
+        value: formatCurrency(summary.incomes.total),
         background: 'linear-gradient(135deg, rgba(111, 214, 255, 0.22) 0%, rgba(83, 253, 215, 0.08) 100%)',
         accent: '#6fd6ff',
-        caption: `Banco ${formatCurrency(usdToCordobas(summary.incomes.bank))} · Efectivo ${formatCurrency(usdToCordobas(summary.incomes.cash))} (≈ ${formatCurrency(summary.incomes.total, 'USD')})`
+        caption: `Banco ${formatCurrency(summary.incomes.bank)} · Efectivo ${formatCurrency(summary.incomes.cash)} (≈ ${formatCurrency(nioToUsd(summary.incomes.total), 'USD')})`
       },
       {
         title: 'Gastos totales',
-        value: formatCurrency(usdToCordobas(summary.expenses.total)),
+        value: formatCurrency(summary.expenses.total),
         background: 'linear-gradient(135deg, rgba(111, 214, 255, 0.14) 0%, rgba(62, 116, 255, 0.08) 100%)',
         accent: '#6fd6ff',
-        caption: `Banco ${formatCurrency(usdToCordobas(summary.expenses.bank))} · Efectivo ${formatCurrency(usdToCordobas(summary.expenses.cash))} (≈ ${formatCurrency(summary.expenses.total, 'USD')})`
+        caption: `Banco ${formatCurrency(summary.expenses.bank)} · Efectivo ${formatCurrency(summary.expenses.cash)} (≈ ${formatCurrency(nioToUsd(summary.expenses.total), 'USD')})`
       },
       {
         title: 'Balance actual',
-        value: formatCurrency(usdToCordobas(summary.balance)),
+        value: formatCurrency(summary.balance),
         background:
           summary.balance >= 0
             ? 'linear-gradient(135deg, rgba(83, 253, 215, 0.22) 0%, rgba(111, 214, 255, 0.12) 100%)'
             : 'linear-gradient(135deg, rgba(255, 148, 148, 0.32) 0%, rgba(111, 214, 255, 0.08) 100%)',
         accent: summary.balance >= 0 ? '#6fd6ff' : '#ff9aa2',
-        caption: `Ingresos - gastos (≈ ${formatCurrency(summary.balance, 'USD')})`
+        caption: `Ingresos - gastos (≈ ${formatCurrency(nioToUsd(summary.balance), 'USD')})`
       }
     ];
 

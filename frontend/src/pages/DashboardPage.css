@@ -197,6 +197,13 @@
   }
 }
 
+@media (max-width: 768px) {
+  .dashboard__charts {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 @media (max-width: 640px) {
   .dashboard {
     border-radius: 1.5rem;

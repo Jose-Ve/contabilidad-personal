@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import logo from '../assets/logo.png';
@@ -17,8 +17,10 @@ const navItems = [
 
 function ShellLayout({ children }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, profile } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuRef = useRef(null);
   const isAdmin = profile?.role === 'admin';
   const parsedFirstName = useMemo(() => {
@@ -98,13 +100,14 @@ function ShellLayout({ children }) {
   }, [profile]);
 
   const handleLogout = useCallback(async () => {
-    setMenuOpen(false);
+    setProfileMenuOpen(false);
+    setMobileNavOpen(false);
     await supabase.auth.signOut();
     navigate('/login', { replace: true });
   }, [navigate]);
 
   useEffect(() => {
-    if (!menuOpen) {
+    if (!profileMenuOpen) {
       return undefined;
     }
 
@@ -114,13 +117,13 @@ function ShellLayout({ children }) {
       }
 
       if (!menuRef.current.contains(event.target)) {
-        setMenuOpen(false);
+        setProfileMenuOpen(false);
       }
     };
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
-        setMenuOpen(false);
+        setProfileMenuOpen(false);
       }
     };
 
@@ -131,16 +134,42 @@ function ShellLayout({ children }) {
       document.removeEventListener('mousedown', handleClick);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [menuOpen]);
+  }, [profileMenuOpen]);
 
-  const toggleMenu = useCallback(() => {
-    setMenuOpen((prev) => !prev);
+  const toggleProfileMenu = useCallback(() => {
+    setMobileNavOpen(false);
+    setProfileMenuOpen((prev) => !prev);
+  }, []);
+
+  const toggleMobileNav = useCallback(() => {
+    setProfileMenuOpen(false);
+    setMobileNavOpen((prev) => !prev);
+  }, []);
+
+  const closeMobileNav = useCallback(() => {
+    setMobileNavOpen(false);
   }, []);
 
   const handleProfileClick = useCallback(() => {
-    setMenuOpen(false);
+    setProfileMenuOpen(false);
+    setMobileNavOpen(false);
     navigate('/profile');
   }, [navigate]);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+    setProfileMenuOpen(false);
+  }, [location.pathname]);
+
+  const navLinkClassName = useCallback(
+    ({ isActive }) => `shell-nav-link${isActive ? ' is-active' : ''}`,
+    []
+  );
+
+  const mobileNavLinkClassName = useCallback(
+    ({ isActive }) => `shell-mobile-nav-link${isActive ? ' is-active' : ''}`,
+    []
+  );
 
   return (
     <div className="shell-root">
@@ -155,60 +184,119 @@ function ShellLayout({ children }) {
 
         <nav className="shell-nav">
           {navItems.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === '/dashboard'} className={({ isActive }) => `shell-nav-link${isActive ? ' is-active' : ''}`}>
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/dashboard'}
+              className={navLinkClassName}
+              onClick={closeMobileNav}
+            >
               {item.label}
             </NavLink>
           ))}
           {isAdmin ? (
-            <NavLink to="/admin/users" className={({ isActive }) => `shell-nav-link${isActive ? ' is-active' : ''}`}>
+            <NavLink to="/admin/users" className={navLinkClassName} onClick={closeMobileNav}>
               Usuarios
             </NavLink>
           ) : null}
         </nav>
 
-        <div className="shell-profile" ref={menuRef}>
+        <div className="shell-header-actions">
           <button
             type="button"
-            className="shell-profile-trigger"
-            onClick={toggleMenu}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
+            className="shell-menu-toggle"
+            onClick={toggleMobileNav}
+            aria-label={mobileNavOpen ? 'Cerrar menú de navegación' : 'Abrir menú de navegación'}
+            aria-expanded={mobileNavOpen}
+            aria-controls="shell-mobile-menu"
           >
-            <span className="shell-avatar">
-              {avatarSrc ? (
-                <img
-                  src={avatarSrc}
-                  alt={profile?.gender === 'female' ? 'Perfil femenino' : 'Perfil masculino'}
-                />
-              ) : (
-                <span className="shell-avatar-initials">{initials}</span>
-              )}
-            </span>
-            <span className="shell-profile-info">
-              <span className="shell-profile-name">{displayName}</span>
-              <span className="shell-profile-role">{isAdmin ? 'Administrador' : 'Usuario'}</span>
-            </span>
-            <span className={`shell-profile-caret${menuOpen ? ' is-open' : ''}`} aria-hidden="true" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
           </button>
 
-          {menuOpen ? (
-            <div className="shell-profile-menu" role="menu">
-              <div className="shell-profile-menu-header">
-                <span className="shell-profile-menu-name">{displayName}</span>
-                <span className="shell-profile-menu-role">{isAdmin ? 'Administrador' : 'Usuario'}</span>
+          <div className="shell-profile" ref={menuRef}>
+            <button
+              type="button"
+              className="shell-profile-trigger"
+              onClick={toggleProfileMenu}
+              aria-haspopup="menu"
+              aria-expanded={profileMenuOpen}
+            >
+              <span className="shell-avatar">
+                {avatarSrc ? (
+                  <img
+                    src={avatarSrc}
+                    alt={profile?.gender === 'female' ? 'Perfil femenino' : 'Perfil masculino'}
+                  />
+                ) : (
+                  <span className="shell-avatar-initials">{initials}</span>
+                )}
+              </span>
+              <span className="shell-profile-info">
+                <span className="shell-profile-name">{displayName}</span>
+                <span className="shell-profile-role">{isAdmin ? 'Administrador' : 'Usuario'}</span>
+              </span>
+              <span className={`shell-profile-caret${profileMenuOpen ? ' is-open' : ''}`} aria-hidden="true" />
+            </button>
+
+            {profileMenuOpen ? (
+              <div className="shell-profile-menu" role="menu">
+                <div className="shell-profile-menu-header">
+                  <span className="shell-profile-menu-name">{displayName}</span>
+                  <span className="shell-profile-menu-role">{isAdmin ? 'Administrador' : 'Usuario'}</span>
+                </div>
+                <div className="shell-profile-menu-actions">
+                  <button type="button" className="shell-profile-menu-item" onClick={handleProfileClick} role="menuitem">
+                    Perfil
+                  </button>
+                  <button type="button" className="shell-profile-menu-item" onClick={handleLogout} role="menuitem">
+                    Cerrar sesión
+                  </button>
+                </div>
               </div>
-              <div className="shell-profile-menu-actions">
-                <button type="button" className="shell-profile-menu-item" onClick={handleProfileClick} role="menuitem">
-                  Perfil
-                </button>
-                <button type="button" className="shell-profile-menu-item" onClick={handleLogout} role="menuitem">
-                  Cerrar sesión
-                </button>
-              </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </header>
+
+      {mobileNavOpen ? (
+        <>
+          <button type="button" className="shell-mobile-backdrop" onClick={closeMobileNav} aria-label="Cerrar menú" />
+          <div className="shell-mobile-menu" id="shell-mobile-menu">
+            <div className="shell-mobile-user">
+              <span className="shell-mobile-user-name">{displayName}</span>
+              <span className="shell-mobile-user-role">{isAdmin ? 'Administrador' : 'Usuario'}</span>
+            </div>
+            <nav className="shell-mobile-nav">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/dashboard'}
+                  className={mobileNavLinkClassName}
+                  onClick={closeMobileNav}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+              {isAdmin ? (
+                <NavLink to="/admin/users" className={mobileNavLinkClassName} onClick={closeMobileNav}>
+                  Usuarios
+                </NavLink>
+              ) : null}
+            </nav>
+            <div className="shell-mobile-actions">
+              <button type="button" className="shell-mobile-action" onClick={handleProfileClick}>
+                Ver perfil
+              </button>
+              <button type="button" className="shell-mobile-action shell-mobile-action--danger" onClick={handleLogout}>
+                Cerrar sesión
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       <main className="shell-main">
         <div className="shell-main-inner">{children}</div>
