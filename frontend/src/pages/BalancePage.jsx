@@ -11,7 +11,7 @@ const formatCurrency = (value, currency = 'NIO') =>
     maximumFractionDigits: 2
   }).format(Number(value ?? 0));
 
-const usdToCordobas = (value) => Number(value ?? 0) * USD_TO_NIO_RATE;
+const nioToUsd = (value) => (Number(value ?? 0) / USD_TO_NIO_RATE || 0);
 
 const monthFormatter = new Intl.DateTimeFormat('es-ES', {
   month: 'long',
@@ -60,7 +60,7 @@ function BalancePage() {
 
       try {
         const params = new URLSearchParams(activeFilters);
-        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/balance?${params.toString()}`, {
+        const response = await fetch(`${import.meta.  env.VITE_API_BASE_URL}/balance?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!response.ok) {
@@ -72,19 +72,19 @@ function BalancePage() {
         if (!preserveMonths) {
           const monthEntries = Array.isArray(payload?.series?.byMonth)
             ? payload.series.byMonth.map((item) => {
-                const incomesUsd = Number(item.incomes ?? 0);
-                const expensesUsd = Number(item.expenses ?? 0);
-                const netUsd = incomesUsd - expensesUsd;
+                const incomesNio = Number(item.incomes ?? 0);
+                const expensesNio = Number(item.expenses ?? 0);
+                const netNio = incomesNio - expensesNio;
 
                 return {
                   month: item.month,
                   label: formatMonthLabel(item.month),
-                  incomesUsd,
-                  incomesNio: usdToCordobas(incomesUsd),
-                  expensesUsd,
-                  expensesNio: usdToCordobas(expensesUsd),
-                  netUsd,
-                  netNio: usdToCordobas(netUsd)
+                  incomesNio,
+                  incomesUsd: nioToUsd(incomesNio),
+                  expensesNio,
+                  expensesUsd: nioToUsd(expensesNio),
+                  netNio,
+                  netUsd: nioToUsd(netNio)
                 };
               })
             : [];
@@ -173,28 +173,28 @@ function BalancePage() {
   const monthlySeries = useMemo(() => {
     // Mantiene un saldo acumulado para reflejar el arrastre entre meses en ambas monedas.
     const byMonth = data?.series?.byMonth ?? [];
-    let runningCarryUsd = 0;
+    let runningCarryNio = 0;
 
     return byMonth.map((item) => {
-      const incomesUsd = Number(item.incomes ?? 0);
-      const expensesUsd = Number(item.expenses ?? 0);
-      const netUsd = incomesUsd - expensesUsd;
-      const carryInUsd = runningCarryUsd;
-      runningCarryUsd += netUsd;
+      const incomesNio = Number(item.incomes ?? 0);
+      const expensesNio = Number(item.expenses ?? 0);
+      const netNio = incomesNio - expensesNio;
+      const carryInNio = runningCarryNio;
+      runningCarryNio += netNio;
 
       return {
         month: item.month,
         label: formatMonthLabel(item.month),
-        incomesUsd,
-        incomesNio: usdToCordobas(incomesUsd),
-        expensesUsd,
-        expensesNio: usdToCordobas(expensesUsd),
-        netUsd,
-        netNio: usdToCordobas(netUsd),
-        carryInUsd,
-        carryInNio: usdToCordobas(carryInUsd),
-        carryOutUsd: runningCarryUsd,
-        carryOutNio: usdToCordobas(runningCarryUsd)
+        incomesNio,
+        incomesUsd: nioToUsd(incomesNio),
+        expensesNio,
+        expensesUsd: nioToUsd(expensesNio),
+        netNio,
+        netUsd: nioToUsd(netNio),
+        carryInNio,
+        carryInUsd: nioToUsd(carryInNio),
+        carryOutNio: runningCarryNio,
+        carryOutUsd: nioToUsd(runningCarryNio)
       };
     });
   }, [data?.series]);
@@ -209,13 +209,13 @@ function BalancePage() {
         <div className="balance__overview">
           <span className="balance__overview-label">Balance general</span>
           <strong className={`balance__overview-value ${summary.balance >= 0 ? 'is-positive' : 'is-negative'}`}>
-            {formatCurrency(usdToCordobas(summary.balance))}
+            {formatCurrency(summary.balance)}
           </strong>
           <span className="balance__overview-detail">
-            Ingresos: {formatCurrency(usdToCordobas(summary.incomes.total))} (≈ {formatCurrency(summary.incomes.total, 'USD')})
+            Ingresos: {formatCurrency(summary.incomes.total)} (≈ {formatCurrency(nioToUsd(summary.incomes.total), 'USD')})
           </span>
           <span className="balance__overview-detail">
-            Gastos: {formatCurrency(usdToCordobas(summary.expenses.total))} (≈ {formatCurrency(summary.expenses.total, 'USD')})
+            Gastos: {formatCurrency(summary.expenses.total)} (≈ {formatCurrency(nioToUsd(summary.expenses.total), 'USD')})
           </span>
         </div>
       </header>
@@ -247,32 +247,32 @@ function BalancePage() {
         <div className="balance-grid">
           <article className="balance-card">
             <p className="balance-card__title">Ingresos</p>
-            <p className="balance-card__value is-positive">{formatCurrency(usdToCordobas(summary.incomes.total))}</p>
-            <p className="balance-card__detail">≈ {formatCurrency(summary.incomes.total, 'USD')}</p>
+            <p className="balance-card__value is-positive">{formatCurrency(summary.incomes.total)}</p>
+            <p className="balance-card__detail">≈ {formatCurrency(nioToUsd(summary.incomes.total), 'USD')}</p>
             <p className="balance-card__detail">
-              Banco: {formatCurrency(usdToCordobas(summary.incomes.bank))} (≈ {formatCurrency(summary.incomes.bank, 'USD')})
+              Banco: {formatCurrency(summary.incomes.bank)} (≈ {formatCurrency(nioToUsd(summary.incomes.bank), 'USD')})
             </p>
             <p className="balance-card__detail">
-              Efectivo: {formatCurrency(usdToCordobas(summary.incomes.cash))} (≈ {formatCurrency(summary.incomes.cash, 'USD')})
+              Efectivo: {formatCurrency(summary.incomes.cash)} (≈ {formatCurrency(nioToUsd(summary.incomes.cash), 'USD')})
             </p>
           </article>
           <article className="balance-card">
             <p className="balance-card__title">Gastos</p>
-            <p className="balance-card__value is-negative">{formatCurrency(usdToCordobas(summary.expenses.total))}</p>
-            <p className="balance-card__detail">≈ {formatCurrency(summary.expenses.total, 'USD')}</p>
+            <p className="balance-card__value is-negative">{formatCurrency(summary.expenses.total)}</p>
+            <p className="balance-card__detail">≈ {formatCurrency(nioToUsd(summary.expenses.total), 'USD')}</p>
             <p className="balance-card__detail">
-              Banco: {formatCurrency(usdToCordobas(summary.expenses.bank))} (≈ {formatCurrency(summary.expenses.bank, 'USD')})
+              Banco: {formatCurrency(summary.expenses.bank)} (≈ {formatCurrency(nioToUsd(summary.expenses.bank), 'USD')})
             </p>
             <p className="balance-card__detail">
-              Efectivo: {formatCurrency(usdToCordobas(summary.expenses.cash))} (≈ {formatCurrency(summary.expenses.cash, 'USD')})
+              Efectivo: {formatCurrency(summary.expenses.cash)} (≈ {formatCurrency(nioToUsd(summary.expenses.cash), 'USD')})
             </p>
           </article>
           <article className="balance-card">
             <p className="balance-card__title">Resultado</p>
             <p className={`balance-card__value ${summary.balance >= 0 ? 'is-positive' : 'is-negative'}`}>
-              {formatCurrency(usdToCordobas(summary.balance))}
+              {formatCurrency(summary.balance)}
             </p>
-            <p className="balance-card__detail">≈ {formatCurrency(summary.balance, 'USD')}</p>
+            <p className="balance-card__detail">≈ {formatCurrency(nioToUsd(summary.balance), 'USD')}</p>
             <p className="balance-card__detail">Actualizado al {new Date(filters.to).toLocaleDateString()}</p>
           </article>
         </div>
