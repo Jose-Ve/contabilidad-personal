@@ -19,5 +19,13 @@ export const config = {
   rateLimit: {
     max: Number.parseInt(process.env.RATE_LIMIT_MAX ?? '100', 10),
     timeWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute'
+  },
+  smtp: {
+    host: process.env.SMTP_HOST ?? 'smtp.sendgrid.net',
+    port: Number.parseInt(process.env.SMTP_PORT ?? '587', 10),
+    user: process.env.SMTP_USER ?? 'apikey',
+    password: process.env.SMTP_PASSWORD ?? '',
+    senderEmail: process.env.SMTP_SENDER_EMAIL ?? '',
+    senderName: process.env.SMTP_SENDER_NAME ?? ''
   }
 };

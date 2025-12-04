@@ -39,7 +39,10 @@ function ProfilePage() {
 
     try {
       setSendingReset(true);
-      setResetFeedback(null);
+      setResetFeedback({
+        variant: 'success',
+        message: 'Solicitud enviada al correo, esto puede tardar en llegar en unos minutos. Revisa tu bandeja de entrada o spam.'
+      });
 
       const redirectTo = `${window.location.origin}${window.location.pathname}#/reset-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
@@ -50,11 +53,15 @@ function ProfilePage() {
         throw error;
       }
 
-      setResetFeedback({
-        variant: 'success',
-        message:
-          'Te enviamos un correo con el enlace para elegir una nueva contraseña. El correo puede tardar algunos minutos en llegar; revisa tu bandeja de entrada o spam.'
-      });
+      setResetFeedback((current) =>
+        current?.variant === 'success'
+          ? current
+          : {
+              variant: 'success',
+              message:
+                'Solicitud enviada al correo, esto puede tardar en llegar en unos minutos. Revisa tu bandeja de entrada o spam.'
+            }
+      );
     } catch (error) {
       console.error('Error solicitando cambio de contraseña', error);
       setResetFeedback({

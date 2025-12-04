@@ -149,9 +149,15 @@ function PublicHomePage() {
       </section>
 
       <footer className="landing-footer" id="seguridad">
-        <p>© {new Date().getFullYear()} Panel Contable. Control financiero práctico.</p>
+        <p>© 2025 VelazCorp. Panel Contable. Control financiero práctico.</p>
         <div className="landing-footer-links">
-          <a href="mailto:soporte@panelcontable.com">soporte@panelcontable.com</a>
+          <a
+            href="https://mail.google.com/mail/?view=cm&fs=1&to=joseleonelvr@gmail.com"
+            target="_blank"
+            rel="noreferrer"
+          >
+            joseleonelvr@gmail.com
+          </a>
           <span>Manual de uso</span>
           <span>Política de seguridad</span>
         </div>

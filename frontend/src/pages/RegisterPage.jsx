@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -6,6 +6,7 @@ import logo from '../assets/logo.png';
 import './RegisterPage.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const LETTERS_PATTERN = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]+$/;
 
 function RegisterPage() {
   const { user } = useAuth();
@@ -13,10 +14,13 @@ function RegisterPage() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors }
   } = useForm({
     defaultValues: { first_name: '', last_name: '', gender: '', email: '', password: '', confirmPassword: '' }
@@ -26,20 +30,71 @@ function RegisterPage() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  useEffect(() => {
+    if (!error) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setError(null), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [error]);
+
+  const sanitizeName = (value) => value.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]+/g, '');
+
+  const normalizeName = (value) =>
+    sanitizeName(value)
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+      .join(' ');
+
+  const handleNameBlur = (field) => (event) => {
+    const rawValue = event.target.value;
+    const sanitized = sanitizeName(rawValue);
+    const formatted = normalizeName(sanitized.trim());
+    if (formatted !== rawValue) {
+      event.target.value = formatted;
+    }
+    setValue(field, formatted, {
+      shouldValidate: true,
+      shouldDirty: formatted !== rawValue
+    });
+  };
+
   const onSubmit = async (values) => {
     if (values.password !== values.confirmPassword) {
       setError('Las contraseñas no coinciden.');
       return;
     }
 
-    const firstName = values.first_name.trim();
-    const lastName = values.last_name.trim();
+    const sanitizedFirst = sanitizeName(values.first_name);
+    const sanitizedLast = sanitizeName(values.last_name);
+
+    const firstName = sanitizedFirst.trim();
+    const lastName = sanitizedLast.trim();
     const gender = values.gender;
 
     if (!firstName || !lastName || !gender) {
       setError('Completa tu nombre, apellido y género para continuar.');
       return;
     }
+
+    if (firstName.length < 3 || lastName.length < 3) {
+      setError('Nombre y apellido deben tener al menos 3 caracteres válidos.');
+      return;
+    }
+
+    const formattedFirstName = normalizeName(firstName);
+    const formattedLastName = normalizeName(lastName);
+
+    setValue('first_name', formattedFirstName, {
+      shouldValidate: false,
+      shouldDirty: formattedFirstName !== values.first_name
+    });
+    setValue('last_name', formattedLastName, {
+      shouldValidate: false,
+      shouldDirty: formattedLastName !== values.last_name
+    });
 
     try {
       setLoading(true);
@@ -51,19 +106,24 @@ function RegisterPage() {
         body: JSON.stringify({
           email: values.email.trim(),
           password: values.password,
-          first_name: firstName,
-          last_name: lastName,
+          first_name: formattedFirstName,
+          last_name: formattedLastName,
           gender
         })
       });
 
+      const payload = await response.json().catch(() => null);
+
       if (!response.ok) {
-        const payload = await response.json().catch(() => null);
         throw new Error(payload?.message ?? 'No se pudo crear la cuenta');
       }
 
-      setSuccess('Cuenta creada correctamente. Revisa tu correo y luego inicia sesión.');
-      setTimeout(() => navigate('/login'), 1600);
+      const successMessage =
+        payload?.message ??
+        'Te has registrado correctamente. Te llegará un mensaje de confirmación a tu correo para poder acceder. El mensaje puede tardar un par de minutos en llegar.';
+
+      setSuccess(successMessage);
+      setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -113,11 +173,13 @@ function RegisterPage() {
                 placeholder="Tu nombre"
                 {...register('first_name', {
                   required: 'El nombre es obligatorio',
-                  minLength: { value: 2, message: 'Mínimo 2 caracteres' },
+                  minLength: { value: 3, message: 'Mínimo 3 caracteres' },
                   maxLength: { value: 60, message: 'Máximo 60 caracteres' },
-                  validate: (value) => value.trim().length > 0 || 'El nombre es obligatorio'
+                  pattern: { value: LETTERS_PATTERN, message: 'Solo usa letras y espacios' },
+                  validate: (value) => value.trim().length >= 3 || 'Debe tener al menos 3 caracteres válidos'
                 })}
                 className="form-input"
+                onBlur={handleNameBlur('first_name')}
               />
               {errors.first_name ? <small className="form-feedback form-feedback--error">{errors.first_name.message}</small> : null}
             </label>
@@ -129,11 +191,13 @@ function RegisterPage() {
                 placeholder="Tu apellido"
                 {...register('last_name', {
                   required: 'El apellido es obligatorio',
-                  minLength: { value: 2, message: 'Mínimo 2 caracteres' },
+                  minLength: { value: 3, message: 'Mínimo 3 caracteres' },
                   maxLength: { value: 60, message: 'Máximo 60 caracteres' },
-                  validate: (value) => value.trim().length > 0 || 'El apellido es obligatorio'
+                  pattern: { value: LETTERS_PATTERN, message: 'Solo usa letras y espacios' },
+                  validate: (value) => value.trim().length >= 3 || 'Debe tener al menos 3 caracteres válidos'
                 })}
                 className="form-input"
+                onBlur={handleNameBlur('last_name')}
               />
               {errors.last_name ? <small className="form-feedback form-feedback--error">{errors.last_name.message}</small> : null}
             </label>
@@ -174,28 +238,51 @@ function RegisterPage() {
 
             <label className="form-field">
               <span>Contraseña</span>
-              <input
-                type="password"
-                placeholder="••••••••"
-                required
-                {...register('password', { required: 'La contraseña es obligatoria', minLength: { value: 8, message: 'Mínimo 8 caracteres' } })}
-                className="form-input"
-              />
+              <div className="form-input-wrapper">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  required
+                  {...register('password', {
+                    required: 'La contraseña es obligatoria',
+                    minLength: { value: 8, message: 'Mínimo 8 caracteres' }
+                  })}
+                  className="form-input"
+                />
+                <button
+                  type="button"
+                  className="form-input__toggle"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  <span aria-hidden="true">{showPassword ? '🙈' : '👁️'}</span>
+                </button>
+              </div>
               {errors.password ? <small className="form-feedback form-feedback--error">{errors.password.message}</small> : null}
             </label>
 
             <label className="form-field">
               <span>Confirmar contraseña</span>
-              <input
-                type="password"
-                placeholder="Repite tu contraseña"
-                required
-                {...register('confirmPassword', {
-                  required: 'Confirma tu contraseña',
-                  validate: (value) => value === watch('password') || 'Las contraseñas no coinciden'
-                })}
-                className="form-input"
-              />
+              <div className="form-input-wrapper">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Repite tu contraseña"
+                  required
+                  {...register('confirmPassword', {
+                    required: 'Confirma tu contraseña',
+                    validate: (value) => value === watch('password') || 'Las contraseñas no coinciden'
+                  })}
+                  className="form-input"
+                />
+                <button
+                  type="button"
+                  className="form-input__toggle"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  aria-label={showConfirmPassword ? 'Ocultar confirmación de contraseña' : 'Mostrar confirmación de contraseña'}
+                >
+                  <span aria-hidden="true">{showConfirmPassword ? '🙈' : '👁️'}</span>
+                </button>
+              </div>
               {errors.confirmPassword ? (
                 <small className="form-feedback form-feedback--error">{errors.confirmPassword.message}</small>
               ) : null}

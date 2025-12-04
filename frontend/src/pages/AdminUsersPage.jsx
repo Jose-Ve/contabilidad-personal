@@ -19,6 +19,10 @@ function AdminUsersPage() {
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', gender: '' });
   const [savingEdit, setSavingEdit] = useState(false);
   const [confirmModal, setConfirmModal] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [stateFilter, setStateFilter] = useState('all');
+  const [confirmationFilter, setConfirmationFilter] = useState('all');
 
   const loadUsers = useCallback(async () => {
     if (!user) {
@@ -185,9 +189,33 @@ function AdminUsersPage() {
   );
 
   const sortedUsers = useMemo(
-    () => users.slice().sort((a, b) => a.email.localeCompare(b.email)),
+    () =>
+      users
+        .slice()
+        .sort((a, b) => getSafeTimestamp(b.created_at) - getSafeTimestamp(a.created_at)),
     [users]
   );
+
+  const filteredUsers = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return sortedUsers.filter((item) => {
+      const matchesSearch =
+        normalizedSearch.length === 0
+          ? true
+          : [item.email, item.first_name, item.last_name, item.full_name]
+              .filter(Boolean)
+              .some((value) => value.toLowerCase().includes(normalizedSearch));
+
+      const matchesRole = roleFilter === 'all' || item.role === roleFilter;
+      const matchesState = stateFilter === 'all' || (item.active ? 'active' : 'inactive') === stateFilter;
+      const matchesConfirmation =
+        confirmationFilter === 'all' ||
+        (confirmationFilter === 'confirmed' ? Boolean(item.email_confirmed_at) : !item.email_confirmed_at);
+
+      return matchesSearch && matchesRole && matchesState && matchesConfirmation;
+    });
+  }, [sortedUsers, searchTerm, roleFilter, stateFilter, confirmationFilter]);
 
   return (
     <section className="users">
@@ -202,6 +230,55 @@ function AdminUsersPage() {
           Seguridad en vivo
         </span>
 
+        <div className="users-card__filters" role="search">
+          <div className="users-filter users-filter--search">
+            <label htmlFor="users-filter-search">Buscar</label>
+            <input
+              id="users-filter-search"
+              type="search"
+              placeholder="Buscar por nombre o correo"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+          </div>
+          <div className="users-filter">
+            <label htmlFor="users-filter-role">Rol</label>
+            <select
+              id="users-filter-role"
+              value={roleFilter}
+              onChange={(event) => setRoleFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="admin">Administradores</option>
+              <option value="user">Usuarios</option>
+            </select>
+          </div>
+          <div className="users-filter">
+            <label htmlFor="users-filter-state">Cuenta</label>
+            <select
+              id="users-filter-state"
+              value={stateFilter}
+              onChange={(event) => setStateFilter(event.target.value)}
+            >
+              <option value="all">Todas</option>
+              <option value="active">Activas</option>
+              <option value="inactive">Inactivas</option>
+            </select>
+          </div>
+          <div className="users-filter">
+            <label htmlFor="users-filter-confirmation">Correo</label>
+            <select
+              id="users-filter-confirmation"
+              value={confirmationFilter}
+              onChange={(event) => setConfirmationFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="confirmed">Confirmados</option>
+              <option value="pending">Pendientes</option>
+            </select>
+          </div>
+        </div>
+
         {alert ? (
           <div className={`users-alert users-alert--${alert.type}`}>{alert.message}</div>
         ) : null}
@@ -210,6 +287,9 @@ function AdminUsersPage() {
         {error ? <p className="users-error">{error}</p> : null}
 
         {!loading && !error ? (
+          filteredUsers.length === 0 ? (
+            <p className="users-empty">No se encontraron usuarios con los filtros aplicados.</p>
+          ) : (
           <div className="users-table__wrapper">
             <table className="users-table">
               <thead>
@@ -224,7 +304,7 @@ function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedUsers.map((item) => (
+                {filteredUsers.map((item) => (
                   <tr key={item.id}>
                     <td>{item.email}</td>
                     <td>{item.first_name ?? extractFirstName(item.full_name) ?? '—'}</td>
@@ -251,7 +331,7 @@ function AdminUsersPage() {
                         onClick={() => handleOpenEdit(item)}
                         disabled={pendingAction?.startsWith('role:') || pendingAction?.startsWith('state:')}
                       >
-                        Editar datos
+                        Ver datos
                       </button>
                       <button
                         type="button"
@@ -267,6 +347,7 @@ function AdminUsersPage() {
               </tbody>
             </table>
           </div>
+          )
         ) : null}
       </article>
 
@@ -284,7 +365,7 @@ function AdminUsersPage() {
           <div className="users-modal__content">
             <header className="users-modal__header">
               <div>
-                <h3>Editar datos de usuario</h3>
+                <h3>Detalles del usuario</h3>
                 <p>{editingUser.email}</p>
               </div>
               <button type="button" className="users-modal__close" onClick={handleCloseEdit} aria-label="Cerrar">
@@ -292,6 +373,14 @@ function AdminUsersPage() {
               </button>
             </header>
             <form className="users-modal__form" onSubmit={handleSubmitEdit}>
+              <p className="users-modal__notice">
+                Puedes cambiar los datos de este usuario.
+                <span
+                  className={`users-status ${editingUser.email_confirmed_at ? 'users-status--confirmed' : 'users-status--pending'}`}
+                >
+                  {editingUser.email_confirmed_at ? 'Correo confirmado' : 'Correo pendiente'}
+                </span>
+              </p>
               <label className="users-modal__field">
                 <span>Nombre</span>
                 <input
@@ -340,6 +429,14 @@ function AdminUsersPage() {
                 <div>
                   <dt>Actualizado</dt>
                   <dd>{formatDate(editingUser.updated_at)}</dd>
+                </div>
+                <div>
+                  <dt>Estado del correo</dt>
+                  <dd>
+                    {editingUser.email_confirmed_at
+                      ? `Confirmado (${formatDate(editingUser.email_confirmed_at)})`
+                      : 'Pendiente de confirmación'}
+                  </dd>
                 </div>
               </dl>
             </form>
@@ -426,6 +523,15 @@ function formatDate(value) {
   } catch (_error) {
     return value;
   }
+}
+
+function getSafeTimestamp(value) {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 export default AdminUsersPage;

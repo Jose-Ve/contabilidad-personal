@@ -44,6 +44,8 @@ export default async function publicRoutes(fastify) {
     const lastName = payload.last_name.trim();
     const fullName = `${firstName} ${lastName}`.replace(/\s+/g, ' ').trim();
 
+    const redirectUrl = `${config.siteUrl}/#/login`;
+
     const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.signUp({
       email: payload.email,
       password: payload.password,
@@ -54,11 +56,15 @@ export default async function publicRoutes(fastify) {
           last_name: lastName,
           gender: payload.gender
         },
-        emailRedirectTo: `${config.siteUrl}/#/login`
+        emailRedirectTo: redirectUrl
       }
     });
 
     if (signUpError || !signUpData?.user) {
+      if (signUpError?.status === 400 && /already registered/i.test(signUpError.message ?? '')) {
+        return reply.code(409).send({ message: 'Este correo ya está registrado.' });
+      }
+
       request.log.warn(signUpError, 'Error al registrar usuario público');
       return reply.code(400).send({ message: 'No se pudo crear la cuenta. ¿Ya registraste este correo?' });
     }
@@ -75,6 +81,12 @@ export default async function publicRoutes(fastify) {
 
     const { error: profileError } = await supabaseAdmin.from('profiles').insert(profileData);
 
+    if (profileError?.code === '23505') {
+      request.log.info(profileError, 'Correo ya existe al crear perfil tras registro');
+      await supabaseAdmin.auth.admin.deleteUser(signUpData.user.id);
+      return reply.code(409).send({ message: 'Este correo ya está registrado. Intenta iniciar sesión o recuperar tu acceso.' });
+    }
+
     if (profileError?.code === '42703') {
       const fallbackInsert = await supabaseAdmin
         .from('profiles')
@@ -84,6 +96,12 @@ export default async function publicRoutes(fastify) {
           full_name: fullName,
           role: 'user'
         });
+
+      if (fallbackInsert.error?.code === '23505') {
+        request.log.info(fallbackInsert.error, 'Correo ya existe al crear perfil tras registro (fallback)');
+        await supabaseAdmin.auth.admin.deleteUser(signUpData.user.id);
+        return reply.code(409).send({ message: 'Este correo ya está registrado. Intenta iniciar sesión o recuperar tu acceso.' });
+      }
 
       if (fallbackInsert.error) {
         request.log.error(fallbackInsert.error, 'Error al crear perfil tras registro (fallback)');
@@ -96,9 +114,20 @@ export default async function publicRoutes(fastify) {
       return reply.code(500).send({ message: 'No se pudo completar el registro. Intenta nuevamente más tarde.' });
     }
 
-    return reply
-      .code(201)
-      .send({ message: 'Cuenta creada correctamente. Revisa tu correo y confirma para activar el acceso.' });
+    const { error: confirmationError } = await supabaseAdmin.auth.resend({
+      type: 'signup',
+      email: payload.email,
+      options: { emailRedirectTo: redirectUrl }
+    });
+
+    if (confirmationError && confirmationError.code !== 'over_email_send_rate_limit') {
+      request.log.warn(confirmationError, 'No se pudo reenviar confirmación inmediatamente tras el registro');
+    }
+
+    return reply.code(201).send({
+      message:
+        'Te has registrado correctamente. Te llegará un mensaje de confirmación a tu correo para poder acceder. El mensaje puede tardar un par de minutos en llegar.'
+    });
   });
 
   fastify.post('/register/resend', async (request, reply) => {

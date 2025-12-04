@@ -369,6 +369,7 @@
 
   .landing-header {
     align-items: center;
+    gap: 2rem;
   }
 
   .landing-menu-toggle {
@@ -382,8 +383,8 @@
     flex: 1;
     flex-direction: row;
     align-items: center;
-    justify-content: flex-end;
-    gap: 2.5rem;
+    justify-content: space-between;
+    gap: 2rem;
     padding: 0;
     background: transparent;
     border: none;
@@ -391,13 +392,21 @@
   }
 
   .landing-nav-links {
+    flex: 1;
     flex-direction: row;
-    gap: 1.75rem;
+    justify-content: center;
+    gap: 1.6rem;
   }
 
   .landing-nav-link {
     border-bottom: none;
     padding: 0;
+  }
+
+  .landing-auth {
+    flex-direction: row;
+    gap: 0.9rem;
+    margin-top: 0;
   }
 
   .landing-auth {

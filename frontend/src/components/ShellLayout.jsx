@@ -8,7 +8,7 @@ import avatarMale from '../assets/hombre.png';
 import './ShellLayout.css';
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/dashboard', label: 'Inicio' },
   { to: '/incomes', label: 'Ingresos' },
   { to: '/expenses', label: 'Gastos' },
   { to: '/balance', label: 'Balance' },

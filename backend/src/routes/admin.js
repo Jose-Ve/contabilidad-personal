@@ -43,6 +43,64 @@ const normalizeProfile = (profile) => ({
   active: profile?.deleted_at === null || profile?.deleted_at === undefined
 });
 
+async function fetchEmailConfirmationMap(userIds) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return new Map();
+  }
+
+  const map = new Map();
+  const targetIds = new Set(userIds);
+  const perPage = Math.min(1000, Math.max(targetIds.size, 100));
+  let page = 1;
+  let shouldContinue = true;
+
+  while (shouldContinue) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+
+    if (error) {
+      throw error;
+    }
+
+    const users = data?.users ?? [];
+    for (const authUser of users) {
+      if (!targetIds.has(authUser.id)) {
+        continue;
+      }
+      map.set(authUser.id, authUser.email_confirmed_at ?? null);
+      if (map.size === targetIds.size) {
+        break;
+      }
+    }
+
+    const total = typeof data?.total === 'number' ? data.total : null;
+    const hasMore = total !== null ? page * perPage < total : users.length === perPage;
+    shouldContinue = hasMore && map.size < targetIds.size;
+    page += 1;
+  }
+
+  return map;
+}
+
+async function appendEmailConfirmation(profiles, logger) {
+  if (!Array.isArray(profiles) || profiles.length === 0) {
+    return profiles;
+  }
+
+  try {
+    const confirmationMap = await fetchEmailConfirmationMap(profiles.map((profile) => profile.id));
+    return profiles.map((profile) => ({
+      ...profile,
+      email_confirmed_at: confirmationMap.get(profile.id) ?? null
+    }));
+  } catch (error) {
+    logger?.error?.(error, 'No se pudo obtener estado de confirmación de correos');
+    return profiles.map((profile) => ({
+      ...profile,
+      email_confirmed_at: null
+    }));
+  }
+}
+
 async function updateProfileWithFallback(id, values, { allowFallback = true } = {}) {
   const result = await supabaseAdmin
     .from('profiles')
@@ -93,14 +151,15 @@ async function updateProfileWithFallback(id, values, { allowFallback = true } = 
   return { error: result.error };
 }
 
-async function listProfilesWithFallback() {
+async function listProfilesWithFallback(logger) {
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select(EXTENDED_SELECT)
     .order('created_at', { ascending: false });
 
   if (!error) {
-    return data.map(normalizeProfile);
+    const normalized = data.map(normalizeProfile);
+    return appendEmailConfirmation(normalized, logger);
   }
 
   if (error.code === COLUMN_NOT_FOUND) {
@@ -111,7 +170,8 @@ async function listProfilesWithFallback() {
     if (fallback.error) {
       throw fallback.error;
     }
-    return fallback.data.map(normalizeProfile);
+    const normalized = fallback.data.map(normalizeProfile);
+    return appendEmailConfirmation(normalized, logger);
   }
 
   throw error;
@@ -195,7 +255,7 @@ export default async function adminRoutes(fastify) {
 
   fastify.get('/users', async (request, reply) => {
     try {
-      const profiles = await listProfilesWithFallback();
+      const profiles = await listProfilesWithFallback(request.log);
       return profiles;
     } catch (error) {
       request.log.error(error, 'Error al listar usuarios');
