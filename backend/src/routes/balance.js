@@ -2,6 +2,22 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { parseWithSchema } from '../utils/validation.js';
 
+const USD_TO_NIO_RATE = 36.7;
+
+const toNio = (amount, currency) => {
+  const numericAmount = Number(amount ?? 0);
+  if (!Number.isFinite(numericAmount)) {
+    return 0;
+  }
+
+  const normalizedCurrency = `${currency ?? ''}`.trim().toUpperCase();
+  if (normalizedCurrency === 'NIO' || normalizedCurrency === '') {
+    return numericAmount;
+  }
+
+  return numericAmount * USD_TO_NIO_RATE;
+};
+
 const balanceQuerySchema = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
@@ -26,8 +42,7 @@ function aggregateByMonth(incomes, expenses) {
         });
       }
       const bucket = map.get(month);
-      const amount = Number(item.amount);
-      const isIncome = key === 'incomes';
+      const amount = toNio(item.amount, item.currency);
       const sourceKey = item.source === 'bank' ? 'Bank' : 'Cash';
 
       bucket[key] += amount;
@@ -69,13 +84,13 @@ export default async function balanceRoutes(fastify) {
 
     let incomesQuery = supabaseAdmin
       .from('incomes')
-      .select('amount, date, source')
+      .select('amount, currency, date, source')
       .eq('user_id', request.user.id)
       .is('deleted_at', null);
 
     let expensesQuery = supabaseAdmin
       .from('expenses')
-      .select('amount, date, source')
+      .select('amount, currency, date, source')
       .eq('user_id', request.user.id)
       .is('deleted_at', null);
 
@@ -98,10 +113,12 @@ export default async function balanceRoutes(fastify) {
     const incomes = incomesResult.data ?? [];
     const expenses = expensesResult.data ?? [];
 
+    request.log.debug({ incomes, expenses }, 'Balance data fetched');
+
     const sumsBySource = (collection) =>
       collection.reduce(
         (acc, row) => {
-          const amount = Number(row.amount);
+          const amount = toNio(row.amount, row.currency);
           const key = row.source === 'bank' ? 'bank' : 'cash';
           acc.total += amount;
           acc[key] += amount;

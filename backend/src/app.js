@@ -9,6 +9,7 @@ import registerRoutes from './routes/index.js';
 export function buildApp() {
   const fastify = Fastify({
     logger: {
+      level: config.env === 'development' ? 'debug' : 'info',
       transport: config.env === 'development' ? { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } } : undefined
     }
   });

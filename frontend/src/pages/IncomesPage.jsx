@@ -36,6 +36,7 @@ const formatMonthLabel = (value) => {
 };
 
 const EXCHANGE_RATE = 36.7; // 1 USD equivale a 36.70 C$
+const isNioCurrency = (value) => `${value ?? ''}`.toUpperCase() === 'NIO';
 const SOURCE_OPTIONS = [
   { value: 'bank', label: 'Cuenta bancaria' },
   { value: 'cash', label: 'Efectivo' }
@@ -278,7 +279,7 @@ function IncomesPage() {
     return items.reduce(
       (acc, item) => {
         const amount = Number(item.amount ?? 0);
-        const isNio = item.currency === 'NIO';
+        const isNio = isNioCurrency(item.currency);
         const usdValue = isNio ? amount / EXCHANGE_RATE : amount;
         const nioValue = isNio ? amount : amount * EXCHANGE_RATE;
 
@@ -313,7 +314,7 @@ function IncomesPage() {
       }
       const bucket = buckets.get(monthKey);
       const amount = Number(item.amount ?? 0);
-      const isNio = item.currency === 'NIO';
+      const isNio = isNioCurrency(item.currency);
       const usdValue = isNio ? amount / EXCHANGE_RATE : amount;
       const nioValue = isNio ? amount : amount * EXCHANGE_RATE;
 
@@ -574,7 +575,7 @@ function IncomesPage() {
                     <tr key={item.id}>
                       <td>{formatDate(item.date)}</td>
                       <td className="incomes-table__amount">
-                        {item.currency === 'NIO' ? 'C$' : '$'}
+                        {isNioCurrency(item.currency) ? 'C$' : '$'}
                         {Number(item.amount).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td>{SOURCE_LABELS[item.source ?? 'cash']}</td>

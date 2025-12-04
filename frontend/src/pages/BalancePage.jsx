@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '../services/supabaseClient.js';
+import { supabase, markSupabaseActivity } from '../services/supabaseClient.js';
 import './BalancePage.css';
 
 const USD_TO_NIO_RATE = 36.7; // 1 USD = 36.70 C$
@@ -38,6 +38,7 @@ function BalancePage() {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [monthsOverview, setMonthsOverview] = useState([]);
   const initialFetchDoneRef = useRef(false);
+  const refreshTimerRef = useRef(null);
 
   const handleChange = useCallback((event) => {
     const { name, value } = event.target;
@@ -60,7 +61,7 @@ function BalancePage() {
 
       try {
         const params = new URLSearchParams(activeFilters);
-        const response = await fetch(`${import.meta.  env.VITE_API_BASE_URL}/balance?${params.toString()}`, {
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/balance?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!response.ok) {
@@ -100,6 +101,16 @@ function BalancePage() {
     [filters]
   );
 
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      window.clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = window.setTimeout(() => {
+      refreshTimerRef.current = null;
+      void loadBalance(undefined, { preserveMonths: false });
+    }, 300);
+  }, [loadBalance]);
+
   useEffect(() => {
     if (initialFetchDoneRef.current) {
       return;
@@ -108,6 +119,28 @@ function BalancePage() {
     initialFetchDoneRef.current = true;
     void loadBalance(filters);
   }, [filters, loadBalance]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('balance-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incomes' }, () => {
+        markSupabaseActivity();
+        scheduleRefresh();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
+        markSupabaseActivity();
+        scheduleRefresh();
+      })
+      .subscribe();
+
+    return () => {
+      if (refreshTimerRef.current) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [scheduleRefresh]);
 
   useEffect(() => {
     if (!monthsOverview.length) {
