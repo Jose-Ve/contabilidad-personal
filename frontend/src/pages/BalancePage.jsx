@@ -123,13 +123,6 @@ function BalancePage() {
     });
   }, [monthsOverview]);
 
-  const selectedMonthData = useMemo(() => {
-    if (!selectedMonth) {
-      return null;
-    }
-    return monthsOverview.find((entry) => entry.month === selectedMonth) ?? null;
-  }, [monthsOverview, selectedMonth]);
-
   const getMonthBounds = (monthKey) => {
     const [year, month] = monthKey.split('-');
     const start = new Date(Number(year), Number(month) - 1, 1);
@@ -198,6 +191,13 @@ function BalancePage() {
       };
     });
   }, [data?.series]);
+
+  const visibleSeries = useMemo(() => {
+    if (!selectedMonth) {
+      return monthlySeries;
+    }
+    return monthlySeries.filter((item) => item.month === selectedMonth);
+  }, [monthlySeries, selectedMonth]);
 
   return (
     <section className="balance">
@@ -301,21 +301,8 @@ function BalancePage() {
               </div>
             ) : null}
           </header>
-          {selectedMonthData ? (
-            <article className="balance-monthly__card balance-monthly__card--focus">
-              <div className="balance-monthly__card-header">
-                <h3>{selectedMonthData.label}</h3>
-                <span className="balance-monthly__chip-count">
-                  Ingresos: {formatCurrency(selectedMonthData.incomesNio)} (≈ {formatCurrency(selectedMonthData.incomesUsd, 'USD')}) · Gastos: {formatCurrency(selectedMonthData.expensesNio)} (≈ {formatCurrency(selectedMonthData.expensesUsd, 'USD')})
-                </span>
-              </div>
-              <p className={`balance-monthly__number ${selectedMonthData.netUsd >= 0 ? 'is-positive' : 'is-negative'}`}>
-                Resultado: {formatCurrency(selectedMonthData.netNio)} (≈ {formatCurrency(selectedMonthData.netUsd, 'USD')})
-              </p>
-            </article>
-          ) : null}
           <div className="balance-monthly__grid">
-            {monthlySeries.map((item) => (
+            {visibleSeries.map((item) => (
               <article key={item.month} className="balance-monthly__card">
                 <h3>{item.label}</h3>
                 <dl className="balance-monthly__details">

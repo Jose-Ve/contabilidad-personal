@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { apiFetch } from '../services/apiClient.js';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import './IncomesPage.css';
 
 const formatAmount = (value) =>
@@ -13,6 +14,18 @@ const monthFormatter = new Intl.DateTimeFormat('es-ES', {
   month: 'long',
   year: 'numeric'
 });
+
+const formatDate = (value) => {
+  if (!value) return '';
+  const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})/.exec(value);
+  if (!match) {
+    return new Date(value).toLocaleDateString('es-NI');
+  }
+
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return date.toLocaleDateString('es-NI');
+};
 
 const formatMonthLabel = (value) => {
   if (!value) return '';
@@ -43,7 +56,27 @@ function IncomesPage() {
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [monthsOverview, setMonthsOverview] = useState([]);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [categoryDraftName, setCategoryDraftName] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [categoryDeleteTarget, setCategoryDeleteTarget] = useState(null);
+  const [showCategoryDeleteConfirm, setShowCategoryDeleteConfirm] = useState(false);
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
   const initialFetchDoneRef = useRef(false);
+
+  const refreshCategories = useCallback(async () => {
+    try {
+      const response = await apiFetch('/categories?type=income');
+      setCategories(response ?? []);
+    } catch (err) {
+      console.error(err);
+      const message = err.payload?.message ?? err.message ?? 'No se pudieron cargar las categorías';
+      setError(message);
+    }
+  }, []);
 
   const {
     register,
@@ -125,17 +158,121 @@ function IncomesPage() {
     }
   };
 
-  const onDeleteIncome = async (id) => {
-    if (!window.confirm('¿Eliminar este ingreso?')) return;
+  const requestDeleteIncome = useCallback((item) => {
+    setDeleteTarget(item);
+    setShowDeleteConfirm(true);
+  }, []);
+
+  const handleCancelDelete = useCallback(() => {
+    if (isDeleting) {
+      return;
+    }
+    setShowDeleteConfirm(false);
+    setDeleteTarget(null);
+  }, [isDeleting]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) {
+      return;
+    }
+    setIsDeleting(true);
     try {
-      await apiFetch(`/incomes/${id}`, { method: 'DELETE' });
-      setItems((prev) => prev.filter((item) => item.id !== id));
+      await apiFetch(`/incomes/${deleteTarget.id}`, { method: 'DELETE' });
+      setItems((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+      setShowDeleteConfirm(false);
+      setDeleteTarget(null);
     } catch (err) {
       console.error(err);
       const message = err.payload?.message ?? err.message ?? 'No se pudo eliminar el ingreso';
       setError(message);
+    } finally {
+      setIsDeleting(false);
     }
-  };
+  }, [deleteTarget]);
+
+  const handleStartEditCategory = useCallback((category) => {
+    setEditingCategoryId(category.id);
+    setCategoryDraftName(category.name ?? '');
+  }, []);
+
+  const handleCancelEditCategory = useCallback(() => {
+    if (savingCategory) {
+      return;
+    }
+    setEditingCategoryId(null);
+    setCategoryDraftName('');
+  }, [savingCategory]);
+
+  const handleSaveCategory = useCallback(async () => {
+    if (!editingCategoryId) {
+      return;
+    }
+    const trimmed = categoryDraftName.trim();
+    if (trimmed.length < 2) {
+      setError('El nombre debe tener al menos 2 caracteres.');
+      return;
+    }
+    setSavingCategory(true);
+    try {
+      await apiFetch(`/categories/${editingCategoryId}`, {
+        method: 'PUT',
+        body: { name: trimmed, type: 'income' }
+      });
+      setCategories((prev) => prev.map((category) => (category.id === editingCategoryId ? { ...category, name: trimmed } : category)));
+      setItems((prev) =>
+        prev.map((item) =>
+          item.category_id === editingCategoryId ? { ...item, category_name: trimmed } : item
+        )
+      );
+      setEditingCategoryId(null);
+      setCategoryDraftName('');
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      const message = err.payload?.message ?? err.message ?? 'No se pudo actualizar la categoría';
+      setError(message);
+    } finally {
+      setSavingCategory(false);
+    }
+  }, [categoryDraftName, editingCategoryId]);
+
+  const requestDeleteCategory = useCallback((category) => {
+    setCategoryDeleteTarget(category);
+    setShowCategoryDeleteConfirm(true);
+  }, []);
+
+  const handleCancelDeleteCategory = useCallback(() => {
+    if (isDeletingCategory) {
+      return;
+    }
+    setShowCategoryDeleteConfirm(false);
+    setCategoryDeleteTarget(null);
+  }, [isDeletingCategory]);
+
+  const handleConfirmDeleteCategory = useCallback(async () => {
+    if (!categoryDeleteTarget) {
+      return;
+    }
+    setIsDeletingCategory(true);
+    try {
+      await apiFetch(`/categories/${categoryDeleteTarget.id}`, { method: 'DELETE' });
+      setCategories((prev) => prev.filter((category) => category.id !== categoryDeleteTarget.id));
+      setItems((prev) =>
+        prev.map((item) =>
+          item.category_id === categoryDeleteTarget.id ? { ...item, category_id: null, category_name: null } : item
+        )
+      );
+      setShowCategoryDeleteConfirm(false);
+      setCategoryDeleteTarget(null);
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      const message = err.payload?.message ?? err.message ?? 'No se pudo eliminar la categoría';
+      setError(message);
+    } finally {
+      setIsDeletingCategory(false);
+    }
+  }, [categoryDeleteTarget]);
 
   const totals = useMemo(() => {
     return items.reduce(
@@ -435,7 +572,7 @@ function IncomesPage() {
                 <tbody>
                   {items.map((item) => (
                     <tr key={item.id}>
-                      <td>{new Date(item.date).toLocaleDateString()}</td>
+                      <td>{formatDate(item.date)}</td>
                       <td className="incomes-table__amount">
                         {item.currency === 'NIO' ? 'C$' : '$'}
                         {Number(item.amount).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -444,7 +581,7 @@ function IncomesPage() {
                       <td>{item.category_name ?? 'Sin categoría'}</td>
                       <td className="incomes-table__note">{item.note ?? '-'}</td>
                       <td className="incomes-table__actions">
-                        <button onClick={() => onDeleteIncome(item.id)} className="incomes-table__delete">
+                        <button onClick={() => requestDeleteIncome(item)} className="incomes-table__delete">
                           Eliminar
                         </button>
                       </td>
@@ -510,50 +647,148 @@ function IncomesPage() {
       ) : null}
 
       {activeTab === 'category' ? (
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const formElement = event.currentTarget;
-            const formData = new FormData(formElement);
-            const name = formData.get('name');
-            if (!name) return;
-            try {
-              setCreatingCategory(true);
-              await apiFetch('/categories', {
-                method: 'POST',
-                body: { name, type: 'income' }
-              });
-              formElement.reset();
-              await loadIncomes(filters);
-              setActiveTab('list');
-              setError(null);
-            } catch (err) {
-              console.error(err);
-              const message = err.payload?.message ?? err.message ?? 'No se pudo crear la categoría';
-              setError(message);
-            } finally {
-              setCreatingCategory(false);
-            }
-          }}
-          className="incomes-card incomes-category"
-        >
-          <div>
+        <section className="incomes-card incomes-category">
+          <div className="incomes-category__intro">
             <h2>Nueva categoría de ingreso</h2>
             <p>Agrupa tus movimientos con categorías creadas a medida.</p>
           </div>
-          <label className="incomes-field">
-            <span>Nombre</span>
-            <input name="name" type="text" placeholder="Salarios, ventas, freelance..." required className="incomes-input" />
-          </label>
-          <button
-            type="submit"
-            disabled={creatingCategory}
-            className={`incomes-button incomes-button--primary ${creatingCategory ? 'is-disabled' : ''}`}
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const formElement = event.currentTarget;
+              const formData = new FormData(formElement);
+              const name = `${formData.get('name') ?? ''}`.trim();
+              if (!name) return;
+              try {
+                setCreatingCategory(true);
+                const created = await apiFetch('/categories', {
+                  method: 'POST',
+                  body: { name, type: 'income' }
+                });
+                formElement.reset();
+                if (created) {
+                  setCategories((prev) => [created, ...prev.filter((category) => category.id !== created.id)]);
+                } else {
+                  await refreshCategories();
+                }
+                setError(null);
+              } catch (err) {
+                console.error(err);
+                const message = err.payload?.message ?? err.message ?? 'No se pudo crear la categoría';
+                setError(message);
+              } finally {
+                setCreatingCategory(false);
+              }
+            }}
+            className="incomes-category__form"
           >
-            {creatingCategory ? 'Creando...' : 'Crear categoría'}
-          </button>
-        </form>
+            <label className="incomes-field incomes-category__field">
+              <span>Nombre</span>
+              <input name="name" type="text" placeholder="Salarios, ventas, freelance..." required className="incomes-input" />
+            </label>
+            <button
+              type="submit"
+              disabled={creatingCategory}
+              className={`incomes-button incomes-button--primary ${creatingCategory ? 'is-disabled' : ''}`}
+            >
+              {creatingCategory ? 'Creando...' : 'Crear categoría'}
+            </button>
+          </form>
+
+          <div className="incomes-category__list">
+            <div className="incomes-category__list-header">
+              <h3>Mis categorías</h3>
+              <p>Administra los nombres que aparecen en tus ingresos y reúsalos cuando los necesites.</p>
+            </div>
+            {categories.length === 0 ? (
+              <p className="incomes-category__empty">Aún no tienes categorías registradas. Crea una para comenzar.</p>
+            ) : (
+              <ul className="incomes-category__items">
+                {categories.map((category) => (
+                  <li key={category.id} className="incomes-category__item">
+                    {editingCategoryId === category.id ? (
+                      <>
+                        <input
+                          type="text"
+                          value={categoryDraftName}
+                          onChange={(event) => setCategoryDraftName(event.target.value)}
+                          className="incomes-input incomes-category__input"
+                          autoFocus
+                        />
+                        <div className="incomes-category__actions">
+                          <button
+                            type="button"
+                            className="incomes-category__button incomes-category__button--primary"
+                            onClick={handleSaveCategory}
+                            disabled={savingCategory}
+                          >
+                            {savingCategory ? 'Guardando…' : 'Guardar'}
+                          </button>
+                          <button
+                            type="button"
+                            className="incomes-category__button"
+                            onClick={handleCancelEditCategory}
+                            disabled={savingCategory}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <span className="incomes-category__name">{category.name}</span>
+                        <div className="incomes-category__actions">
+                          <button
+                            type="button"
+                            className="incomes-category__button"
+                            onClick={() => handleStartEditCategory(category)}
+                            disabled={savingCategory || isDeletingCategory}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="incomes-category__button incomes-category__button--danger"
+                            onClick={() => requestDeleteCategory(category)}
+                            disabled={savingCategory || isDeletingCategory}
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       ) : null}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Eliminar ingreso"
+        message={deleteTarget ? `Eliminarás el ingreso del ${formatDate(deleteTarget.date)} por ${deleteTarget.currency === 'NIO' ? 'C$' : '$'}${Number(deleteTarget.amount ?? 0).toLocaleString('es-NI', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}. Esta acción no se puede deshacer.` : 'Esta acción no se puede deshacer.'}
+        confirmLabel={isDeleting ? 'Eliminando…' : 'Eliminar'}
+        cancelLabel="Cancelar"
+        confirmDisabled={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
+
+      <ConfirmDialog
+        open={showCategoryDeleteConfirm}
+        title="Eliminar categoría"
+        message={categoryDeleteTarget ? `¿Deseas eliminar la categoría “${categoryDeleteTarget.name}”? Los ingresos asociados conservarán el movimiento pero quedarán sin categoría.` : 'Esta acción no se puede deshacer.'}
+        confirmLabel={isDeletingCategory ? 'Eliminando…' : 'Eliminar'}
+        cancelLabel="Cancelar"
+        confirmDisabled={isDeletingCategory}
+        onConfirm={handleConfirmDeleteCategory}
+        onCancel={handleCancelDeleteCategory}
+      />
     </section>
   );
 }
