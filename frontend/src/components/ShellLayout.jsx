@@ -12,6 +12,7 @@ const navItems = [
   { to: '/incomes', label: 'Ingresos' },
   { to: '/expenses', label: 'Gastos' },
   { to: '/balance', label: 'Balance' },
+  { to: '/transfers', label: 'Transferencias' },
   { to: '/reports', label: 'Reportes' }
 ];
 

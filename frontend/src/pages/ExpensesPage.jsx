@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { FormProvider, useForm } from 'react-hook-form';
 import { apiFetch } from '../services/apiClient.js';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import AccountSelector from '../components/AccountSelector.jsx';
+import { formatAccountName } from '../utils/accounts.js';
 import './ExpensesPage.css';
 
 const formatAmount = (value) =>
@@ -66,6 +68,7 @@ function ExpensesPage() {
   const [categoryDeleteTarget, setCategoryDeleteTarget] = useState(null);
   const [showCategoryDeleteConfirm, setShowCategoryDeleteConfirm] = useState(false);
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   const initialFetchDoneRef = useRef(false);
 
   const refreshCategories = useCallback(async () => {
@@ -79,21 +82,26 @@ function ExpensesPage() {
     }
   }, []);
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { isSubmitting }
-  } = useForm({
+  const expenseForm = useForm({
     defaultValues: {
       amount: '',
       currency: 'NIO',
-      source: 'bank',
+      source: '',
+      account_id: '',
       date: new Date().toISOString().slice(0, 10),
       category_id: '',
       note: ''
     }
   });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { isSubmitting }
+  } = expenseForm;
 
   const loadExpenses = useCallback(async (query = {}) => {
     setLoading(true);
@@ -130,14 +138,40 @@ function ExpensesPage() {
     void loadExpenses(filters);
   }, [filters, loadExpenses]);
 
+  const sourceSelection = watch('source');
+
+  const handleAccountChange = useCallback(
+    ({ source, account }) => {
+      if (source === 'bank' && account) {
+        setSelectedAccount(account);
+        setValue('currency', account.currency, { shouldValidate: true, shouldDirty: true });
+      } else {
+        setSelectedAccount(null);
+      }
+    },
+    [setValue]
+  );
+
+  useEffect(() => {
+    if (sourceSelection !== 'bank') {
+      setSelectedAccount(null);
+    }
+  }, [sourceSelection]);
+
+  const lockedCurrency = selectedAccount?.currency ?? null;
+
   const onSubmitExpense = async (values) => {
     try {
+      const accountId = values.source === 'bank' ? values.account_id || null : null;
+      const accountDetails = values.source === 'bank' && selectedAccount && selectedAccount.id === accountId ? selectedAccount : null;
+      const payloadCurrency = accountDetails?.currency ?? values.currency;
       await apiFetch('/expenses', {
         method: 'POST',
         body: {
           amount: Number(values.amount),
-          currency: values.currency,
+          currency: payloadCurrency,
           source: values.source,
+          account_id: accountId,
           date: values.date,
           category_id: values.category_id || null,
           note: values.note || null
@@ -145,12 +179,14 @@ function ExpensesPage() {
       });
       reset({
         amount: '',
-        currency: values.currency,
-        source: values.source,
-        date: values.date,
-        category_id: values.category_id,
+        currency: 'NIO',
+        source: '',
+        account_id: '',
+        date: new Date().toISOString().slice(0, 10),
+        category_id: '',
         note: ''
       });
+      setSelectedAccount(null);
       await loadExpenses(filters);
       setActiveTab('list');
     } catch (err) {
@@ -576,7 +612,11 @@ function ExpensesPage() {
                         {isNioCurrency(item.currency) ? 'C$' : '$'}
                         {Number(item.amount).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td>{SOURCE_LABELS[item.source ?? 'cash']}</td>
+                      <td>
+                        {item.source === 'bank'
+                          ? formatAccountName(item.account) || 'Cuenta bancaria'
+                          : SOURCE_LABELS[item.source ?? 'cash']}
+                      </td>
                       <td>{item.category_name ?? 'Sin categoría'}</td>
                       <td className="expenses-table__note">{item.note ?? '-'}</td>
                       <td className="expenses-table__actions">
@@ -594,59 +634,63 @@ function ExpensesPage() {
       ) : null}
 
       {activeTab === 'add' ? (
-        <form onSubmit={handleSubmit(onSubmitExpense)} className="expenses-card expenses-form">
-          <div className="expenses-form__intro">
-            <h2>Registrar gasto</h2>
-            <p>Incluye gastos operativos, pagos recurrentes y compras puntuales.</p>
-          </div>
-          <label className="expenses-field">
-            <span>Monto</span>
-            <input type="number" step="0.01" placeholder="0.00" required {...register('amount')} className="expenses-input" />
-          </label>
-          <label className="expenses-field">
-            <span>Moneda</span>
-            <select {...register('currency')} className="expenses-select">
-              <option value="NIO">Córdoba nicaragüense (C$)</option>
-              <option value="USD">Dólar estadounidense ($)</option>
-            </select>
-          </label>
-          <label className="expenses-field">
-            <span>Origen del gasto</span>
-            <select {...register('source')} className="expenses-select">
-              {SOURCE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="expenses-field">
-            <span>Fecha</span>
-            <input type="date" required {...register('date')} className="expenses-input" />
-          </label>
-          <label className="expenses-field">
-            <span>Categoría</span>
-            <select {...register('category_id')} className="expenses-select">
-              <option value="">Sin categoría</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="expenses-field expenses-field--full">
-            <span>Nota</span>
-            <textarea rows={3} placeholder="Describe el gasto" {...register('note')} className="expenses-textarea" />
-          </label>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className={`expenses-button expenses-button--primary ${isSubmitting ? 'is-disabled' : ''}`}
-          >
-            {isSubmitting ? 'Guardando...' : 'Guardar gasto'}
-          </button>
-        </form>
+        <FormProvider {...expenseForm}>
+          <form onSubmit={handleSubmit(onSubmitExpense)} className="expenses-card expenses-form">
+            <div className="expenses-form__intro">
+              <h2>Registrar gasto</h2>
+              <p>Incluye gastos operativos, pagos recurrentes y compras puntuales.</p>
+            </div>
+            <label className="expenses-field">
+              <span>Monto</span>
+              <input type="number" step="0.01" placeholder="0.00" required {...register('amount')} className="expenses-input" />
+            </label>
+            <AccountSelector
+              sourceField="source"
+              accountField="account_id"
+              label="Origen del gasto"
+              accountLabel="Cuenta bancaria"
+              fieldClass="expenses-field"
+              accountFieldClass="expenses-field"
+              sourceSelectClass="expenses-select"
+              accountSelectClass="expenses-select"
+              containerClass="expenses-account-selector"
+              onAccountChange={handleAccountChange}
+            />
+            <label className="expenses-field">
+              <span>Moneda</span>
+              <select {...register('currency')} className="expenses-select" disabled={Boolean(lockedCurrency)}>
+                <option value="NIO">Córdoba nicaragüense (C$)</option>
+                <option value="USD">Dólar estadounidense ($)</option>
+              </select>
+            </label>
+            <label className="expenses-field">
+              <span>Fecha</span>
+              <input type="date" required {...register('date')} className="expenses-input" />
+            </label>
+            <label className="expenses-field">
+              <span>Categoría</span>
+              <select {...register('category_id')} className="expenses-select">
+                <option value="">Sin categoría</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="expenses-field expenses-field--full">
+              <span>Nota</span>
+              <textarea rows={3} placeholder="Describe el gasto" {...register('note')} className="expenses-textarea" />
+            </label>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`expenses-button expenses-button--primary ${isSubmitting ? 'is-disabled' : ''}`}
+            >
+              {isSubmitting ? 'Guardando...' : 'Guardar gasto'}
+            </button>
+          </form>
+        </FormProvider>
       ) : null}
 
       {activeTab === 'category' ? (

@@ -178,6 +178,40 @@
   color: rgba(216, 244, 255, 0.72);
 }
 
+.balance-card__accounts {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 0 0;
+  display: grid;
+  gap: 0.45rem;
+  border-top: 1px solid rgba(111, 214, 255, 0.24);
+}
+
+.balance-card__accounts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: rgba(216, 244, 255, 0.78);
+}
+
+.balance-card__accounts li span:last-child {
+  color: #ffffff;
+}
+
+.balance-card__account-name {
+  font-weight: 600;
+  color: rgba(216, 244, 255, 0.88);
+}
+
+.balance-card__accounts .is-positive {
+  color: #53fdd7;
+}
+
+.balance-card__accounts .is-negative {
+  color: #ff9aa2;
+}
+
 .balance-monthly {
   display: grid;
   gap: 1.5rem;

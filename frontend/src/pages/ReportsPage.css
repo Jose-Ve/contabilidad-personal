@@ -197,6 +197,112 @@
   color: rgba(226, 232, 240, 0.6);
 }
 
+.reports-accounts {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.reports-accounts__intro h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #ffffff;
+}
+
+.reports-accounts__intro p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.68);
+  max-width: 560px;
+}
+
+.reports-accounts__grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.reports-accounts__item {
+  border-radius: 1.1rem;
+  padding: 1.1rem 1.25rem;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  box-shadow: 0 18px 32px rgba(2, 8, 21, 0.4);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.reports-accounts__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.reports-accounts__header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #ffffff;
+}
+
+.reports-accounts__institution {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: rgba(148, 197, 255, 0.7);
+}
+
+.reports-accounts__currency {
+  align-self: flex-start;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(148, 197, 255, 0.9);
+}
+
+.reports-accounts__totals {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.reports-accounts__totals > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.reports-accounts__totals dt {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 197, 255, 0.75);
+}
+
+.reports-accounts__totals dd {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+}
+
+.reports-accounts__totals dd small {
+  font-size: 0.75rem;
+  color: rgba(226, 232, 240, 0.6);
+}
+
+.reports-accounts__totals dd.is-positive {
+  color: #34d399;
+}
+
+.reports-accounts__totals dd.is-negative {
+  color: #f87171;
+}
+
 .reports-monthly {
   display: grid;
   gap: 1.25rem;

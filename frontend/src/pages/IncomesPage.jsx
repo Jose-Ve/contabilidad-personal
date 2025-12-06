@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { FormProvider, useForm } from 'react-hook-form';
 import { apiFetch } from '../services/apiClient.js';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import AccountSelector from '../components/AccountSelector.jsx';
+import { formatAccountName } from '../utils/accounts.js';
 import './IncomesPage.css';
 
 const formatAmount = (value) =>
@@ -66,6 +68,7 @@ function IncomesPage() {
   const [categoryDeleteTarget, setCategoryDeleteTarget] = useState(null);
   const [showCategoryDeleteConfirm, setShowCategoryDeleteConfirm] = useState(false);
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   const initialFetchDoneRef = useRef(false);
 
   const refreshCategories = useCallback(async () => {
@@ -79,21 +82,48 @@ function IncomesPage() {
     }
   }, []);
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { isSubmitting }
-  } = useForm({
+  const incomeForm = useForm({
     defaultValues: {
       amount: '',
       currency: 'NIO',
-      source: 'bank',
+      source: '',
+      account_id: '',
       date: new Date().toISOString().slice(0, 10),
       category_id: '',
       note: ''
     }
   });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { isSubmitting }
+  } = incomeForm;
+
+  const sourceSelection = watch('source');
+
+  const handleAccountChange = useCallback(
+    ({ source, account }) => {
+      if (source === 'bank' && account) {
+        setSelectedAccount(account);
+        setValue('currency', account.currency, { shouldValidate: true, shouldDirty: true });
+      } else {
+        setSelectedAccount(null);
+      }
+    },
+    [setValue]
+  );
+
+  useEffect(() => {
+    if (sourceSelection !== 'bank') {
+      setSelectedAccount(null);
+    }
+  }, [sourceSelection]);
+
+  const lockedCurrency = selectedAccount?.currency ?? null;
 
   const loadIncomes = useCallback(async (query = {}) => {
     setLoading(true);
@@ -131,12 +161,16 @@ function IncomesPage() {
 
   const onSubmitIncome = async (values) => {
     try {
+      const accountId = values.source === 'bank' ? values.account_id || null : null;
+      const accountDetails = values.source === 'bank' && selectedAccount && selectedAccount.id === accountId ? selectedAccount : null;
+      const payloadCurrency = accountDetails?.currency ?? values.currency;
       await apiFetch('/incomes', {
         method: 'POST',
         body: {
           amount: Number(values.amount),
-          currency: values.currency,
+          currency: payloadCurrency,
           source: values.source,
+          account_id: accountId,
           date: values.date,
           category_id: values.category_id || null,
           note: values.note ?? null
@@ -144,12 +178,14 @@ function IncomesPage() {
       });
       reset({
         amount: '',
-        currency: values.currency,
-        source: values.source,
-        date: values.date,
-        category_id: values.category_id,
+        currency: 'NIO',
+        source: '',
+        account_id: '',
+        date: new Date().toISOString().slice(0, 10),
+        category_id: '',
         note: ''
       });
+      setSelectedAccount(null);
       await loadIncomes(filters);
       setActiveTab('list');
     } catch (err) {
@@ -578,7 +614,11 @@ function IncomesPage() {
                         {isNioCurrency(item.currency) ? 'C$' : '$'}
                         {Number(item.amount).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td>{SOURCE_LABELS[item.source ?? 'cash']}</td>
+                      <td>
+                        {item.source === 'bank'
+                          ? formatAccountName(item.account) || 'Cuenta bancaria'
+                          : SOURCE_LABELS[item.source ?? 'cash']}
+                      </td>
                       <td>{item.category_name ?? 'Sin categoría'}</td>
                       <td className="incomes-table__note">{item.note ?? '-'}</td>
                       <td className="incomes-table__actions">
@@ -596,55 +636,59 @@ function IncomesPage() {
       ) : null}
 
       {activeTab === 'add' ? (
-        <form onSubmit={handleSubmit(onSubmitIncome)} className="incomes-card incomes-form">
-          <div className="incomes-form__intro">
-            <h2>Registrar ingreso</h2>
-            <p>Completa el formulario para registrar un nuevo movimiento.</p>
-          </div>
-          <label className="incomes-field">
-            <span>Monto</span>
-            <input type="number" step="0.01" placeholder="0.00" required {...register('amount')} className="incomes-input" />
-          </label>
-          <label className="incomes-field">
-            <span>Moneda</span>
-            <select {...register('currency')} className="incomes-input">
-              <option value="NIO">Córdoba nicaragüense (C$)</option>
-              <option value="USD">Dólar estadounidense ($)</option>
-            </select>
-          </label>
-          <label className="incomes-field">
-            <span>Origen del ingreso</span>
-            <select {...register('source')} className="incomes-input">
-              {SOURCE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="incomes-field">
-            <span>Fecha</span>
-            <input type="date" required {...register('date')} className="incomes-input" />
-          </label>
-          <label className="incomes-field">
-            <span>Categoría</span>
-            <select {...register('category_id')} className="incomes-input">
-              <option value="">Sin categoría</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="incomes-field incomes-field--full">
-            <span>Nota</span>
-            <textarea rows={3} placeholder="Detalles opcionales" {...register('note')} className="incomes-textarea" />
-          </label>
-          <button type="submit" disabled={isSubmitting} className="incomes-button incomes-button--primary">
-            {isSubmitting ? 'Guardando...' : 'Guardar ingreso'}
-          </button>
-        </form>
+        <FormProvider {...incomeForm}>
+          <form onSubmit={handleSubmit(onSubmitIncome)} className="incomes-card incomes-form">
+            <div className="incomes-form__intro">
+              <h2>Registrar ingreso</h2>
+              <p>Completa el formulario para registrar un nuevo movimiento.</p>
+            </div>
+            <label className="incomes-field">
+              <span>Monto</span>
+              <input type="number" step="0.01" placeholder="0.00" required {...register('amount')} className="incomes-input" />
+            </label>
+            <AccountSelector
+              sourceField="source"
+              accountField="account_id"
+              label="Origen del ingreso"
+              accountLabel="Cuenta bancaria"
+              fieldClass="incomes-field"
+              accountFieldClass="incomes-field"
+              sourceSelectClass="incomes-input"
+              accountSelectClass="incomes-input"
+              containerClass="incomes-account-selector"
+              onAccountChange={handleAccountChange}
+            />
+            <label className="incomes-field">
+              <span>Moneda</span>
+              <select {...register('currency')} className="incomes-input" disabled={Boolean(lockedCurrency)}>
+                <option value="NIO">Córdoba nicaragüense (C$)</option>
+                <option value="USD">Dólar estadounidense ($)</option>
+              </select>
+            </label>
+            <label className="incomes-field">
+              <span>Fecha</span>
+              <input type="date" required {...register('date')} className="incomes-input" />
+            </label>
+            <label className="incomes-field">
+              <span>Categoría</span>
+              <select {...register('category_id')} className="incomes-input">
+                <option value="">Sin categoría</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="incomes-field incomes-field--full">
+              <span>Nota</span>
+              <textarea rows={3} placeholder="Detalles opcionales" {...register('note')} className="incomes-textarea" />
+            </label>
+            <button type="submit" disabled={isSubmitting} className="incomes-button incomes-button--primary">
+              {isSubmitting ? 'Guardando...' : 'Guardar ingreso'}
+            </button>
+          </form>
+        </FormProvider>
       ) : null}
 
       {activeTab === 'category' ? (

@@ -5,6 +5,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage.jsx'));
 const IncomesPage = lazy(() => import('./pages/IncomesPage.jsx'));
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage.jsx'));
 const BalancePage = lazy(() => import('./pages/BalancePage.jsx'));
+const TransfersPage = lazy(() => import('./pages/TransfersPage.jsx'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage.jsx'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx'));
 const LoginPage = lazy(() => import('./pages/LoginPage.jsx'));
@@ -47,6 +48,7 @@ function App() {
             <Route path="/incomes" element={<IncomesPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/balance" element={<BalancePage />} />
+            <Route path="/transfers" element={<TransfersPage />} />
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/categories/new" element={<CreateCategoryPage />} />

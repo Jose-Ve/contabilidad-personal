@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, markSupabaseActivity } from '../services/supabaseClient.js';
+import { formatAccountName } from '../utils/accounts.js';
 import './BalancePage.css';
 
 const USD_TO_NIO_RATE = 36.7; // 1 USD = 36.70 C$
@@ -32,7 +33,14 @@ const formatMonthLabel = (value) => {
 
 function BalancePage() {
   const [filters, setFilters] = useState({ from: yearStart, to: todayISO });
-  const [data, setData] = useState({ incomes: 0, expenses: 0, balance: 0, series: [] });
+  const [data, setData] = useState({
+    incomes: 0,
+    expenses: 0,
+    balance: 0,
+    balanceBreakdown: { total: 0, bank: 0, cash: 0 },
+    series: [],
+    accounts: []
+  });
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(null);
@@ -68,7 +76,19 @@ function BalancePage() {
           throw new Error('No se pudo calcular el balance');
         }
         const payload = await response.json();
-        setData(payload);
+        setData({
+          incomes: payload.incomes,
+          expenses: payload.expenses,
+          balance: payload.balance,
+          balanceBreakdown:
+            payload.balanceBreakdown ?? {
+              total: Number(payload.balance ?? 0),
+              bank: 0,
+              cash: 0
+            },
+          series: payload.series ?? {},
+          accounts: Array.isArray(payload.accounts) ? payload.accounts : []
+        });
 
         if (!preserveMonths) {
           const monthEntries = Array.isArray(payload?.series?.byMonth)
@@ -131,6 +151,10 @@ function BalancePage() {
         markSupabaseActivity();
         scheduleRefresh();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transfers' }, () => {
+        markSupabaseActivity();
+        scheduleRefresh();
+      })
       .subscribe();
 
     return () => {
@@ -189,12 +213,47 @@ function BalancePage() {
       return { total, bank: 0, cash: 0 };
     };
 
+    const balanceBreakdown = normalizeTotals(
+      data.balanceBreakdown ?? { total: Number(data.balance ?? 0) }
+    );
+
     return {
       incomes: normalizeTotals(data.incomes),
       expenses: normalizeTotals(data.expenses),
-      balance: Number(data.balance ?? 0)
+      balance: Number(data.balance ?? 0),
+      balanceBreakdown
     };
   }, [data]);
+
+  const accountsSummary = useMemo(() => {
+    if (!Array.isArray(data.accounts) || data.accounts.length === 0) {
+      return [];
+    }
+
+    return data.accounts.map((entry, index) => {
+      const accountId = entry.account_id ?? entry.account?.id ?? `account-${index}`;
+      const label = formatAccountName(entry.account) || 'Cuenta bancaria';
+      const incomesNio = Number(entry.incomes?.nio ?? entry.incomes ?? 0);
+      const incomesUsd = Number(entry.incomes?.usd ?? incomesNio / USD_TO_NIO_RATE);
+      const expensesNio = Number(entry.expenses?.nio ?? entry.expenses ?? 0);
+      const expensesUsd = Number(entry.expenses?.usd ?? expensesNio / USD_TO_NIO_RATE);
+      const netNio = Number(entry.net?.nio ?? entry.net ?? incomesNio - expensesNio);
+      const netUsd = Number(entry.net?.usd ?? netNio / USD_TO_NIO_RATE);
+
+      return {
+        id: accountId,
+        label,
+        institution:
+          entry.account?.bank_institution === 'Otro'
+            ? entry.account?.institution_name ?? null
+            : entry.account?.bank_institution ?? null,
+        currency: entry.account?.currency ?? 'NIO',
+        incomes: { nio: incomesNio, usd: incomesUsd },
+        expenses: { nio: expensesNio, usd: expensesUsd },
+        net: { nio: netNio, usd: netUsd }
+      };
+    });
+  }, [data.accounts]);
 
   const monthlySeries = useMemo(() => {
     // Mantiene un saldo acumulado para reflejar el arrastre entre meses en ambas monedas.
@@ -288,6 +347,18 @@ function BalancePage() {
             <p className="balance-card__detail">
               Efectivo: {formatCurrency(summary.incomes.cash)} (≈ {formatCurrency(nioToUsd(summary.incomes.cash), 'USD')})
             </p>
+            {accountsSummary.length > 0 ? (
+              <ul className="balance-card__accounts">
+                {accountsSummary.map((account) => (
+                  <li key={`${account.id}-incomes`}>
+                    <span className="balance-card__account-name">{account.label}</span>
+                    <span>
+                      {formatCurrency(account.incomes.nio)} (≈ {formatCurrency(account.incomes.usd, 'USD')})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </article>
           <article className="balance-card">
             <p className="balance-card__title">Gastos</p>
@@ -299,14 +370,52 @@ function BalancePage() {
             <p className="balance-card__detail">
               Efectivo: {formatCurrency(summary.expenses.cash)} (≈ {formatCurrency(nioToUsd(summary.expenses.cash), 'USD')})
             </p>
+            {accountsSummary.length > 0 ? (
+              <ul className="balance-card__accounts">
+                {accountsSummary.map((account) => (
+                  <li key={`${account.id}-expenses`}>
+                    <span className="balance-card__account-name">{account.label}</span>
+                    <span>
+                      {formatCurrency(account.expenses.nio)} (≈ {formatCurrency(account.expenses.usd, 'USD')})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </article>
           <article className="balance-card">
             <p className="balance-card__title">Resultado</p>
-            <p className={`balance-card__value ${summary.balance >= 0 ? 'is-positive' : 'is-negative'}`}>
-              {formatCurrency(summary.balance)}
+            <p className={`balance-card__value ${summary.balanceBreakdown.total >= 0 ? 'is-positive' : 'is-negative'}`}>
+              {formatCurrency(summary.balanceBreakdown.total)}
             </p>
-            <p className="balance-card__detail">≈ {formatCurrency(nioToUsd(summary.balance), 'USD')}</p>
+            <p className="balance-card__detail">
+              ≈ {formatCurrency(nioToUsd(summary.balanceBreakdown.total), 'USD')}
+            </p>
             <p className="balance-card__detail">Actualizado al {new Date(filters.to).toLocaleDateString()}</p>
+            <p className="balance-card__detail">
+              Banco: {formatCurrency(summary.balanceBreakdown.bank)} (≈ {formatCurrency(
+                nioToUsd(summary.balanceBreakdown.bank),
+                'USD'
+              )})
+            </p>
+            <p className="balance-card__detail">
+              Efectivo: {formatCurrency(summary.balanceBreakdown.cash)} (≈ {formatCurrency(
+                nioToUsd(summary.balanceBreakdown.cash),
+                'USD'
+              )})
+            </p>
+            {accountsSummary.length > 0 ? (
+              <ul className="balance-card__accounts">
+                {accountsSummary.map((account) => (
+                  <li key={`${account.id}-net`}>
+                    <span className="balance-card__account-name">{account.label}</span>
+                    <span className={account.net.nio >= 0 ? 'is-positive' : 'is-negative'}>
+                      {formatCurrency(account.net.nio)} (≈ {formatCurrency(account.net.usd, 'USD')})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </article>
         </div>
       )}

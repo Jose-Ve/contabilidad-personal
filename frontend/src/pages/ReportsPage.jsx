@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { apiFetch } from '../services/apiClient.js';
+import { formatAccountName } from '../utils/accounts.js';
 import './ReportsPage.css';
 
 const USD_TO_NIO_RATE = 36.7;
@@ -18,6 +19,27 @@ const SOURCE_LABELS = {
 };
 
 const SOURCE_FALLBACK = 'Efectivo';
+
+const resolveOriginLabel = (row) => {
+  const type = row?.source ?? 'cash';
+  if (type === 'bank') {
+    if (row?.account) {
+      const label = formatAccountName(row.account);
+      if (label) {
+        return label;
+      }
+    }
+    if (row?.account?.institution_name) {
+      return row.account.institution_name;
+    }
+    if (row?.account?.bank_institution) {
+      return row.account.bank_institution;
+    }
+    return 'Cuenta bancaria';
+  }
+
+  return SOURCE_LABELS[type] ?? SOURCE_FALLBACK;
+};
 
 const numberFormatter = new Intl.NumberFormat('es-NI', {
   minimumFractionDigits: 2,
@@ -40,13 +62,37 @@ const formatCurrencyValue = (value, currency = 'NIO') => {
   return `${symbol}${numberFormatter.format(Number(value ?? 0))}`;
 };
 
-const formatDate = (value) => {
+const parseDateValue = (value) => {
   if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  const isoMatch = /^([0-9]{4})-([0-9]{2})-([0-9]{2})/.exec(`${value}`.trim());
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+
+  const timestamp = Date.parse(value);
+  if (!Number.isNaN(timestamp)) {
+    return new Date(timestamp);
+  }
+
+  return null;
+};
+
+const formatDate = (value) => {
+  const parsed = parseDateValue(value);
+  if (!parsed) {
     return '-';
   }
 
   try {
-    return dateFormatter.format(new Date(value));
+    return dateFormatter.format(parsed);
   } catch (error) {
     console.warn('No se pudo formatear la fecha', error);
     return '-';
@@ -213,7 +259,29 @@ const buildBalanceReport = (payload) => {
     };
   });
 
-  return { summary, rows };
+  const accounts = Array.isArray(payload?.accounts)
+    ? payload.accounts.map((entry) => {
+        const accountId = entry.account_id ?? entry.account?.id ?? null;
+        const account = entry.account ?? null;
+
+        const incomesNio = Number(entry?.incomes?.nio ?? entry?.incomes ?? 0);
+        const incomesUsd = Number(entry?.incomes?.usd ?? incomesNio / USD_TO_NIO_RATE);
+        const expensesNio = Number(entry?.expenses?.nio ?? entry?.expenses ?? 0);
+        const expensesUsd = Number(entry?.expenses?.usd ?? expensesNio / USD_TO_NIO_RATE);
+        const netNio = Number(entry?.net?.nio ?? entry?.net ?? incomesNio - expensesNio);
+        const netUsd = Number(entry?.net?.usd ?? netNio / USD_TO_NIO_RATE);
+
+        return {
+          accountId,
+          account,
+          incomes: { nio: incomesNio, usd: incomesUsd },
+          expenses: { nio: expensesNio, usd: expensesUsd },
+          net: { nio: netNio, usd: netUsd }
+        };
+      })
+    : [];
+
+  return { summary, rows, accounts };
 };
 
 const downloadWorkbook = async (workbook, filename) => {
@@ -235,7 +303,7 @@ function ReportsPage() {
   const [selectedPreset, setSelectedPreset] = useState('custom');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [reportData, setReportData] = useState({ rows: [], summary: null, monthly: [] });
+  const [reportData, setReportData] = useState({ rows: [], summary: null, monthly: [], accounts: [] });
   const [appliedFilters, setAppliedFilters] = useState(() => getDefaultFilters());
   const [appliedDataset, setAppliedDataset] = useState('incomes');
 
@@ -283,16 +351,22 @@ function ReportsPage() {
         const path = datasetToUse === 'incomes' ? '/incomes' : '/expenses';
         const response = await apiFetch(`${path}${queryString ? `?${queryString}` : ''}`);
         const rows = Array.isArray(response)
-          ? [...response].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          ? [...response].sort((a, b) => {
+              const dateA = parseDateValue(a.date);
+              const dateB = parseDateValue(b.date);
+              const timeA = dateA ? dateA.getTime() : 0;
+              const timeB = dateB ? dateB.getTime() : 0;
+              return timeB - timeA;
+            })
           : [];
         const summary = summarizeMovements(rows);
         const monthly = groupMovementsByMonth(rows);
-        setReportData({ rows, summary, monthly });
+        setReportData({ rows, summary, monthly, accounts: [] });
       } else {
         const balancePath = queryString ? `/balance?${queryString}` : '/balance';
         const response = await apiFetch(balancePath);
-        const { summary, rows } = buildBalanceReport(response ?? {});
-        setReportData({ rows, summary, monthly: rows });
+        const { summary, rows, accounts } = buildBalanceReport(response ?? {});
+        setReportData({ rows, summary, monthly: rows, accounts: accounts ?? [] });
       }
 
       setAppliedFilters({ ...filtersToUse });
@@ -365,9 +439,9 @@ function ReportsPage() {
           const usdValue = currency === 'USD' ? amount : amount / USD_TO_NIO_RATE;
 
           return [
-            row.date ? new Date(row.date) : '',
+            row.date ? parseDateValue(row.date) : '',
             row.category_name ?? 'Sin categoría',
-            SOURCE_LABELS[row.source ?? 'cash'] ?? SOURCE_FALLBACK,
+            resolveOriginLabel(row),
             currency,
             amount,
             nioValue,
@@ -486,21 +560,21 @@ function ReportsPage() {
         worksheet.views = [{ state: 'frozen', ySplit: 1 }];
 
         const tableRows = reportData.rows.map((row) => {
-          const incomesUsd = Number(row.incomes ?? 0);
-          const expensesUsd = Number(row.expenses ?? 0);
-          const netUsd = Number(row.net ?? 0);
-          const carryUsd = Number(row.carryOut ?? 0);
+          const incomesNio = Number(row.incomes ?? 0);
+          const expensesNio = Number(row.expenses ?? 0);
+          const netNio = Number(row.net ?? 0);
+          const carryNio = Number(row.carryOut ?? 0);
 
           return [
             row.label,
-            incomesUsd * USD_TO_NIO_RATE,
-            incomesUsd,
-            expensesUsd * USD_TO_NIO_RATE,
-            expensesUsd,
-            netUsd * USD_TO_NIO_RATE,
-            netUsd,
-            carryUsd * USD_TO_NIO_RATE,
-            carryUsd
+            incomesNio,
+            incomesNio / USD_TO_NIO_RATE,
+            expensesNio,
+            expensesNio / USD_TO_NIO_RATE,
+            netNio,
+            netNio / USD_TO_NIO_RATE,
+            carryNio,
+            carryNio / USD_TO_NIO_RATE
           ];
         });
 
@@ -544,12 +618,12 @@ function ReportsPage() {
         summaryHeader.getCell(2).alignment = { horizontal: 'right' };
 
         const summaryRows = [
-          ['Ingresos (C$)', (summary.incomes?.total ?? 0) * USD_TO_NIO_RATE],
-          ['Ingresos (USD)', summary.incomes?.total ?? 0],
-          ['Gastos (C$)', (summary.expenses?.total ?? 0) * USD_TO_NIO_RATE],
-          ['Gastos (USD)', summary.expenses?.total ?? 0],
-          ['Balance (C$)', (summary.balance ?? 0) * USD_TO_NIO_RATE],
-          ['Balance (USD)', summary.balance ?? 0]
+          ['Ingresos (C$)', summary.incomes?.total ?? 0],
+          ['Ingresos (USD)', (summary.incomes?.total ?? 0) / USD_TO_NIO_RATE],
+          ['Gastos (C$)', summary.expenses?.total ?? 0],
+          ['Gastos (USD)', (summary.expenses?.total ?? 0) / USD_TO_NIO_RATE],
+          ['Balance (C$)', summary.balance ?? 0],
+          ['Balance (USD)', (summary.balance ?? 0) / USD_TO_NIO_RATE]
         ];
 
         summaryRows.forEach(([label, value], index) => {
@@ -608,7 +682,7 @@ function ReportsPage() {
         return [
           formatDate(row.date),
           row.category_name ?? 'Sin categoría',
-          SOURCE_LABELS[row.source ?? 'cash'] ?? SOURCE_FALLBACK,
+          resolveOriginLabel(row),
           currency,
           numberFormatter.format(amount),
           numberFormatter.format(nioValue),
@@ -651,17 +725,24 @@ function ReportsPage() {
       currentY += 14;
       doc.text(`Total equivalente en USD: ${formatCurrencyValue(totalUsd, 'USD')}`, 40, currentY);
     } else {
-      const body = reportData.rows.map((row) => [
-        row.label,
-        numberFormatter.format(row.incomes * USD_TO_NIO_RATE),
-        numberFormatter.format(row.incomes),
-        numberFormatter.format(row.expenses * USD_TO_NIO_RATE),
-        numberFormatter.format(row.expenses),
-        numberFormatter.format(row.net * USD_TO_NIO_RATE),
-        numberFormatter.format(row.net),
-        numberFormatter.format(row.carryOut * USD_TO_NIO_RATE),
-        numberFormatter.format(row.carryOut)
-      ]);
+      const body = reportData.rows.map((row) => {
+        const incomesNio = Number(row.incomes ?? 0);
+        const expensesNio = Number(row.expenses ?? 0);
+        const netNio = Number(row.net ?? 0);
+        const carryNio = Number(row.carryOut ?? 0);
+
+        return [
+          row.label,
+          numberFormatter.format(incomesNio),
+          numberFormatter.format(incomesNio / USD_TO_NIO_RATE),
+          numberFormatter.format(expensesNio),
+          numberFormatter.format(expensesNio / USD_TO_NIO_RATE),
+          numberFormatter.format(netNio),
+          numberFormatter.format(netNio / USD_TO_NIO_RATE),
+          numberFormatter.format(carryNio),
+          numberFormatter.format(carryNio / USD_TO_NIO_RATE)
+        ];
+      });
 
       autoTable(doc, {
         head: [
@@ -686,12 +767,12 @@ function ReportsPage() {
       const summary = reportData.summary ?? { incomes: { total: 0 }, expenses: { total: 0 }, balance: 0 };
       const finalY = (doc.lastAutoTable?.finalY ?? 80) + 18;
       doc.setFontSize(10);
-      doc.text(`Ingresos (C$): ${formatCurrencyValue(summary.incomes.total * USD_TO_NIO_RATE, 'NIO')}`, 40, finalY);
-      doc.text(`Ingresos (USD): ${formatCurrencyValue(summary.incomes.total, 'USD')}`, 40, finalY + 14);
-      doc.text(`Gastos (C$): ${formatCurrencyValue(summary.expenses.total * USD_TO_NIO_RATE, 'NIO')}`, 40, finalY + 28);
-      doc.text(`Gastos (USD): ${formatCurrencyValue(summary.expenses.total, 'USD')}`, 40, finalY + 42);
-      doc.text(`Balance (C$): ${formatCurrencyValue(summary.balance * USD_TO_NIO_RATE, 'NIO')}`, 40, finalY + 56);
-      doc.text(`Balance (USD): ${formatCurrencyValue(summary.balance, 'USD')}`, 40, finalY + 70);
+      doc.text(`Ingresos (C$): ${formatCurrencyValue(summary.incomes.total, 'NIO')}`, 40, finalY);
+      doc.text(`Ingresos (USD): ${formatCurrencyValue(summary.incomes.total / USD_TO_NIO_RATE, 'USD')}`, 40, finalY + 14);
+      doc.text(`Gastos (C$): ${formatCurrencyValue(summary.expenses.total, 'NIO')}`, 40, finalY + 28);
+      doc.text(`Gastos (USD): ${formatCurrencyValue(summary.expenses.total / USD_TO_NIO_RATE, 'USD')}`, 40, finalY + 42);
+      doc.text(`Balance (C$): ${formatCurrencyValue(summary.balance, 'NIO')}`, 40, finalY + 56);
+      doc.text(`Balance (USD): ${formatCurrencyValue(summary.balance / USD_TO_NIO_RATE, 'USD')}`, 40, finalY + 70);
     }
 
     doc.save(`reporte-${appliedDataset}-${rangeSuffix}.pdf`);
@@ -739,21 +820,21 @@ function ReportsPage() {
       return null;
     }
 
-    const incomesUsd = Number(reportData.summary.incomes.total ?? 0);
-    const incomesBankUsd = Number(reportData.summary.incomes.bank ?? 0);
-    const incomesCashUsd = Number(reportData.summary.incomes.cash ?? 0);
-    const expensesUsd = Number(reportData.summary.expenses.total ?? 0);
-    const expensesBankUsd = Number(reportData.summary.expenses.bank ?? 0);
-    const expensesCashUsd = Number(reportData.summary.expenses.cash ?? 0);
-    const balanceUsd = Number(reportData.summary.balance ?? 0);
+    const incomesNio = Number(reportData.summary.incomes.total ?? 0);
+    const incomesBankNio = Number(reportData.summary.incomes.bank ?? 0);
+    const incomesCashNio = Number(reportData.summary.incomes.cash ?? 0);
+    const expensesNio = Number(reportData.summary.expenses.total ?? 0);
+    const expensesBankNio = Number(reportData.summary.expenses.bank ?? 0);
+    const expensesCashNio = Number(reportData.summary.expenses.cash ?? 0);
+    const balanceNio = Number(reportData.summary.balance ?? 0);
 
-    const incomesNio = incomesUsd * USD_TO_NIO_RATE;
-    const incomesBankNio = incomesBankUsd * USD_TO_NIO_RATE;
-    const incomesCashNio = incomesCashUsd * USD_TO_NIO_RATE;
-    const expensesNio = expensesUsd * USD_TO_NIO_RATE;
-    const expensesBankNio = expensesBankUsd * USD_TO_NIO_RATE;
-    const expensesCashNio = expensesCashUsd * USD_TO_NIO_RATE;
-    const balanceNio = balanceUsd * USD_TO_NIO_RATE;
+    const incomesUsd = incomesNio / USD_TO_NIO_RATE;
+    const incomesBankUsd = incomesBankNio / USD_TO_NIO_RATE;
+    const incomesCashUsd = incomesCashNio / USD_TO_NIO_RATE;
+    const expensesUsd = expensesNio / USD_TO_NIO_RATE;
+    const expensesBankUsd = expensesBankNio / USD_TO_NIO_RATE;
+    const expensesCashUsd = expensesCashNio / USD_TO_NIO_RATE;
+    const balanceUsd = balanceNio / USD_TO_NIO_RATE;
 
     return (
       <div className="reports-summary">
@@ -773,7 +854,7 @@ function ReportsPage() {
         </article>
         <article className="reports-summary__item">
           <span className="reports-summary__label">Balance</span>
-          <strong className={`reports-summary__value ${balanceUsd >= 0 ? 'is-positive' : 'is-negative'}`}>
+          <strong className={`reports-summary__value ${balanceNio >= 0 ? 'is-positive' : 'is-negative'}`}>
             {formatCurrencyValue(balanceNio, 'NIO')}
           </strong>
           <small className="reports-summary__hint">≈ {formatCurrencyValue(balanceUsd, 'USD')}</small>
@@ -781,6 +862,79 @@ function ReportsPage() {
       </div>
     );
   }, [reportData.summary, appliedDataset]);
+
+  const balanceAccountsSection = useMemo(() => {
+    if (appliedDataset !== 'balance') {
+      return null;
+    }
+
+    const accounts = Array.isArray(reportData.accounts) ? reportData.accounts : [];
+    if (accounts.length === 0) {
+      return null;
+    }
+
+    return (
+      <section className="reports-accounts">
+        <header className="reports-accounts__intro">
+          <h2>Cuentas bancarias</h2>
+          <p>Detalle de ingresos, gastos y saldo por cuenta para el rango seleccionado.</p>
+        </header>
+        <div className="reports-accounts__grid">
+          {accounts.map((entry, index) => {
+            const key = entry.accountId ?? entry.account?.id ?? `account-${index}`;
+            const label = formatAccountName(entry.account) || 'Cuenta bancaria';
+            const institution = entry.account?.bank_institution === 'Otro'
+              ? entry.account?.institution_name ?? 'Otro'
+              : entry.account?.bank_institution ?? null;
+            const currency = entry.account?.currency ?? 'NIO';
+
+            const incomesNio = Number(entry.incomes?.nio ?? 0);
+            const incomesUsd = Number(entry.incomes?.usd ?? incomesNio / USD_TO_NIO_RATE);
+            const expensesNio = Number(entry.expenses?.nio ?? 0);
+            const expensesUsd = Number(entry.expenses?.usd ?? expensesNio / USD_TO_NIO_RATE);
+            const netNio = Number(entry.net?.nio ?? incomesNio - expensesNio);
+            const netUsd = Number(entry.net?.usd ?? netNio / USD_TO_NIO_RATE);
+            const netClass = netNio >= 0 ? 'is-positive' : 'is-negative';
+
+            return (
+              <article key={key} className="reports-accounts__item">
+                <header className="reports-accounts__header">
+                  <div>
+                    <h3>{label}</h3>
+                    {institution ? <span className="reports-accounts__institution">{institution}</span> : null}
+                  </div>
+                  <span className="reports-accounts__currency">{currency}</span>
+                </header>
+                <dl className="reports-accounts__totals">
+                  <div>
+                    <dt>Ingresos</dt>
+                    <dd>
+                      {formatCurrencyValue(incomesNio, 'NIO')}
+                      <small>≈ {formatCurrencyValue(incomesUsd, 'USD')}</small>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Gastos</dt>
+                    <dd>
+                      {formatCurrencyValue(expensesNio, 'NIO')}
+                      <small>≈ {formatCurrencyValue(expensesUsd, 'USD')}</small>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Saldo</dt>
+                    <dd className={netClass}>
+                      {formatCurrencyValue(netNio, 'NIO')}
+                      <small>≈ {formatCurrencyValue(netUsd, 'USD')}</small>
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    );
+  }, [appliedDataset, reportData.accounts]);
 
   return (
     <section className="reports">
@@ -867,6 +1021,7 @@ function ReportsPage() {
           <>
             {movementSummaryCards}
             {balanceSummaryCards}
+            {balanceAccountsSection}
 
             {appliedDataset !== 'balance' && reportData.monthly.length > 0 ? (
               <section className="reports-monthly">
@@ -937,26 +1092,26 @@ function ReportsPage() {
                           <td>{row.label}</td>
                           <td>
                             <div className="reports-table__amount">
-                              <span>{formatCurrencyValue(row.incomes * USD_TO_NIO_RATE, 'NIO')}</span>
-                              <span className="reports-table__amount-secondary">≈ {formatCurrencyValue(row.incomes, 'USD')}</span>
+                              <span>{formatCurrencyValue(row.incomes, 'NIO')}</span>
+                              <span className="reports-table__amount-secondary">≈ {formatCurrencyValue(row.incomes / USD_TO_NIO_RATE, 'USD')}</span>
                             </div>
                           </td>
                           <td>
                             <div className="reports-table__amount">
-                              <span>{formatCurrencyValue(row.expenses * USD_TO_NIO_RATE, 'NIO')}</span>
-                              <span className="reports-table__amount-secondary">≈ {formatCurrencyValue(row.expenses, 'USD')}</span>
+                              <span>{formatCurrencyValue(row.expenses, 'NIO')}</span>
+                              <span className="reports-table__amount-secondary">≈ {formatCurrencyValue(row.expenses / USD_TO_NIO_RATE, 'USD')}</span>
                             </div>
                           </td>
                           <td className={row.net >= 0 ? 'is-positive' : 'is-negative'}>
                             <div className="reports-table__amount">
-                              <span>{formatCurrencyValue(row.net * USD_TO_NIO_RATE, 'NIO')}</span>
-                              <span className="reports-table__amount-secondary">≈ {formatCurrencyValue(row.net, 'USD')}</span>
+                              <span>{formatCurrencyValue(row.net, 'NIO')}</span>
+                              <span className="reports-table__amount-secondary">≈ {formatCurrencyValue(row.net / USD_TO_NIO_RATE, 'USD')}</span>
                             </div>
                           </td>
                           <td className={row.carryOut >= 0 ? 'is-positive' : 'is-negative'}>
                             <div className="reports-table__amount">
-                              <span>{formatCurrencyValue(row.carryOut * USD_TO_NIO_RATE, 'NIO')}</span>
-                              <span className="reports-table__amount-secondary">≈ {formatCurrencyValue(row.carryOut, 'USD')}</span>
+                              <span>{formatCurrencyValue(row.carryOut, 'NIO')}</span>
+                              <span className="reports-table__amount-secondary">≈ {formatCurrencyValue(row.carryOut / USD_TO_NIO_RATE, 'USD')}</span>
                             </div>
                           </td>
                         </tr>
@@ -966,7 +1121,7 @@ function ReportsPage() {
                           <td>{formatDate(row.date)}</td>
                           <td>{row.category_name ?? 'Sin categoría'}</td>
                           <td>{formatCurrencyValue(row.amount, row.currency ?? 'NIO')}</td>
-                          <td>{SOURCE_LABELS[row.source ?? 'cash'] ?? SOURCE_FALLBACK}</td>
+                          <td>{resolveOriginLabel(row)}</td>
                           <td>{row.note ?? '-'}</td>
                         </tr>
                       ))}

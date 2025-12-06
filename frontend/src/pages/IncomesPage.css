@@ -562,6 +562,13 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.incomes-account-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.85rem;
+  grid-column: 1 / -1;
+}
+
 .incomes-form__intro {
   grid-column: 1 / -1;
 }

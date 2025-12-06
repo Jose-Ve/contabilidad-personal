@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { parseWithSchema } from '../utils/validation.js';
+import { computeAccountBalance } from '../utils/account-balance.js';
+import { ensureAccountCurrency, loadUserAccount, normalizeCurrency } from '../utils/accounts.js';
 
 const expenseSchema = z.object({
   amount: z.coerce.number().nonnegative('El monto debe ser mayor o igual a cero'),
@@ -8,6 +10,7 @@ const expenseSchema = z.object({
   source: z.enum(['cash', 'bank']).default('cash'),
   date: z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Fecha inválida'),
   category_id: z.string().uuid().nullable().optional(),
+  account_id: z.string().uuid().nullable().optional(),
   note: z.string().trim().max(255).optional().nullable()
 });
 
@@ -23,6 +26,16 @@ function mapExpenseRow(row) {
     amount: Number(row.amount),
     currency: row.currency,
     source: row.source ?? 'cash',
+    account_id: row.account_id ?? null,
+    account: row.account
+      ? {
+          id: row.account.id,
+          name: row.account.name,
+          currency: row.account.currency,
+          bank_institution: row.account.bank_institution,
+          institution_name: row.account.institution_name
+        }
+      : null,
     date: row.date,
     note: row.note,
     category_id: row.category_id,
@@ -62,7 +75,7 @@ export default async function expensesRoutes(fastify) {
     const filters = parseWithSchema(querySchema, request.query ?? {});
     let query = supabaseAdmin
       .from('expenses')
-      .select('id, amount, currency, source, date, note, category_id, created_at, category:categories!left(id,name)')
+      .select('id, amount, currency, source, account_id, date, note, category_id, created_at, category:categories!left(id,name), account:accounts!left(id,name,currency,bank_institution,institution_name)')
       .eq('user_id', request.user.id)
       .is('deleted_at', null)
       .order('date', { ascending: false });
@@ -94,10 +107,62 @@ export default async function expensesRoutes(fastify) {
       if (!categoryIsValid) return;
     }
 
+    let accountRecord = null;
+    if (payload.source === 'bank') {
+      if (!payload.account_id) {
+        return reply.code(400).send({ message: 'Debes seleccionar una cuenta bancaria.' });
+      }
+
+      try {
+        accountRecord = await loadUserAccount(supabaseAdmin, request.user.id, payload.account_id);
+      } catch (accountError) {
+        request.log.error(accountError, 'Error obteniendo cuenta para gasto');
+        return reply.code(500).send({ message: 'No se pudo validar la cuenta seleccionada.' });
+      }
+
+      if (!accountRecord) {
+        return reply.code(400).send({ message: 'La cuenta seleccionada no existe o ya no está disponible.' });
+      }
+
+      if (!ensureAccountCurrency(accountRecord, payload.currency ?? accountRecord.currency)) {
+        return reply.code(400).send({ message: 'La moneda no coincide con la cuenta seleccionada.' });
+      }
+    } else {
+      payload.account_id = null;
+    }
+
+    const normalizedCurrency = accountRecord ? accountRecord.currency : normalizeCurrency(payload.currency) ?? 'USD';
+
+    let accountBalance = 0;
+    try {
+      accountBalance = await computeAccountBalance(supabaseAdmin, request.user.id, {
+        source: payload.source,
+        accountId: payload.source === 'bank' ? accountRecord?.id ?? payload.account_id : null,
+        currency: normalizedCurrency,
+        account: accountRecord
+      });
+    } catch (balanceError) {
+      request.log.error(balanceError, 'Error calculando saldo para gasto');
+      return reply.code(500).send({ message: 'No se pudo verificar el saldo disponible.' });
+    }
+
+    if (accountBalance < Number(payload.amount ?? 0)) {
+      return reply.code(400).send({ message: 'No hay saldo suficiente en la cuenta seleccionada.' });
+    }
+
     const { data, error } = await supabaseAdmin
       .from('expenses')
-      .insert({ ...payload, user_id: request.user.id })
-      .select('id, amount, currency, source, date, note, category_id, created_at')
+      .insert({
+        amount: payload.amount,
+        currency: normalizedCurrency,
+        source: payload.source,
+        account_id: payload.account_id,
+        date: payload.date,
+        category_id: payload.category_id ?? null,
+        note: payload.note ?? null,
+        user_id: request.user.id
+      })
+      .select('id, amount, currency, source, account_id, date, note, category_id, created_at')
       .single();
 
     if (error) {
@@ -119,13 +184,97 @@ export default async function expensesRoutes(fastify) {
       if (!categoryIsValid) return;
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data: current, error: currentError } = await supabaseAdmin
       .from('expenses')
-      .update({ ...payload, updated_at: new Date().toISOString() })
+      .select('id, amount, currency, source, account_id')
       .eq('id', request.params.id)
       .eq('user_id', request.user.id)
       .is('deleted_at', null)
-      .select('id, amount, currency, source, date, note, category_id, updated_at')
+      .maybeSingle();
+
+    if (currentError) {
+      request.log.error(currentError, 'Error al obtener gasto para actualizar');
+      return reply.code(500).send({ message: 'No se pudo actualizar el gasto' });
+    }
+
+    if (!current) {
+      return reply.code(404).send({ message: 'Gasto no encontrado' });
+    }
+
+    const nextSource = payload.source ?? current.source ?? 'cash';
+    let nextAccountId = null;
+    let accountRecord = null;
+    if (nextSource === 'bank') {
+      const candidateAccountId = payload.account_id ?? current.account_id;
+      if (!candidateAccountId) {
+        return reply.code(400).send({ message: 'Debes seleccionar una cuenta bancaria.' });
+      }
+      try {
+        accountRecord = await loadUserAccount(supabaseAdmin, request.user.id, candidateAccountId);
+      } catch (accountError) {
+        request.log.error(accountError, 'Error obteniendo cuenta para actualizar gasto');
+        return reply.code(500).send({ message: 'No se pudo validar la cuenta seleccionada.' });
+      }
+
+      if (!accountRecord) {
+        return reply.code(400).send({ message: 'La cuenta seleccionada no existe o ya no está disponible.' });
+      }
+      nextAccountId = accountRecord.id;
+    }
+
+    const nextCurrency = accountRecord ? accountRecord.currency : normalizeCurrency(payload.currency ?? current.currency) ?? 'NIO';
+    const nextAmount = payload.amount !== undefined ? Number(payload.amount) : Number(current.amount);
+
+    if (accountRecord && !ensureAccountCurrency(accountRecord, nextCurrency)) {
+      return reply.code(400).send({ message: 'La moneda no coincide con la cuenta seleccionada.' });
+    }
+
+    let currentBalance = 0;
+    try {
+      currentBalance = await computeAccountBalance(supabaseAdmin, request.user.id, {
+        source: nextSource,
+        accountId: nextSource === 'bank' ? nextAccountId : null,
+        currency: nextCurrency,
+        account: accountRecord
+      });
+    } catch (balanceError) {
+      request.log.error(balanceError, 'Error calculando saldo para actualizar gasto');
+      return reply.code(500).send({ message: 'No se pudo verificar el saldo disponible.' });
+    }
+
+    const switchingAccount =
+      current.source !== nextSource || (nextSource === 'bank' ? current.account_id !== nextAccountId : current.account_id !== null);
+    const availableBeforeUpdate = switchingAccount ? currentBalance : currentBalance + Number(current.amount ?? 0);
+
+    if (availableBeforeUpdate < nextAmount) {
+      return reply.code(400).send({ message: 'No hay saldo suficiente en la cuenta seleccionada.' });
+    }
+
+    if (nextSource !== 'bank') {
+      nextAccountId = null;
+    }
+
+    const updates = {
+      amount: nextAmount,
+      currency: nextCurrency,
+      source: nextSource,
+      account_id: nextAccountId,
+      date: payload.date,
+      category_id: payload.category_id,
+      note: payload.note
+    };
+
+    const sanitizedUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined)
+    );
+
+    const { data, error } = await supabaseAdmin
+      .from('expenses')
+      .update({ ...sanitizedUpdates, updated_at: new Date().toISOString() })
+      .eq('id', request.params.id)
+      .eq('user_id', request.user.id)
+      .is('deleted_at', null)
+      .select('id, amount, currency, source, account_id, date, note, category_id, updated_at')
       .single();
 
     if (error || !data) {
