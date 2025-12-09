@@ -49,6 +49,8 @@ const SOURCE_LABELS = SOURCE_OPTIONS.reduce((acc, option) => {
   return acc;
 }, {});
 
+const PAGE_SIZE = 10;
+
 function ExpensesPage() {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -69,6 +71,8 @@ function ExpensesPage() {
   const [showCategoryDeleteConfirm, setShowCategoryDeleteConfirm] = useState(false);
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
   const initialFetchDoneRef = useRef(false);
 
   const refreshCategories = useCallback(async () => {
@@ -82,8 +86,8 @@ function ExpensesPage() {
     }
   }, []);
 
-  const expenseForm = useForm({
-    defaultValues: {
+  const buildExpenseDefaultValues = useCallback(
+    () => ({
       amount: '',
       currency: 'NIO',
       source: '',
@@ -91,7 +95,12 @@ function ExpensesPage() {
       date: new Date().toISOString().slice(0, 10),
       category_id: '',
       note: ''
-    }
+    }),
+    []
+  );
+
+  const expenseForm = useForm({
+    defaultValues: buildExpenseDefaultValues()
   });
 
   const {
@@ -120,6 +129,7 @@ function ExpensesPage() {
       setItems(expensesResponse ?? []);
       setCategories(categoriesResponse ?? []);
       setError(null);
+      setCurrentPage(1);
     } catch (err) {
       console.error(err);
       const message = err.payload?.message ?? err.message ?? 'No se pudieron cargar los gastos';
@@ -137,6 +147,50 @@ function ExpensesPage() {
     initialFetchDoneRef.current = true;
     void loadExpenses(filters);
   }, [filters, loadExpenses]);
+
+  const buildExpenseFormValuesFromItem = useCallback(
+    (item) => {
+      const defaults = buildExpenseDefaultValues();
+      if (!item) {
+        return defaults;
+      }
+
+      return {
+        ...defaults,
+        amount: item.amount !== null && item.amount !== undefined ? `${item.amount}` : defaults.amount,
+        currency: item.currency ?? defaults.currency,
+        source: item.source ?? defaults.source,
+        account_id: item.source === 'bank' ? item.account_id ?? '' : '',
+        date: item.date ? item.date.slice(0, 10) : defaults.date,
+        category_id: item.category_id ? `${item.category_id}` : '',
+        note: item.note ?? ''
+      };
+    },
+    [buildExpenseDefaultValues]
+  );
+
+  const handleCancelEditExpense = useCallback(() => {
+    setEditingExpenseId(null);
+    setSelectedAccount(null);
+    reset(buildExpenseDefaultValues());
+    setError(null);
+  }, [buildExpenseDefaultValues, reset, setError]);
+
+  const handleStartEditExpense = useCallback(
+    (item) => {
+      if (!item) {
+        return;
+      }
+
+      setEditingExpenseId(item.id);
+      const nextValues = buildExpenseFormValuesFromItem(item);
+      reset(nextValues, { keepDirty: false, keepTouched: false });
+      setSelectedAccount(item.source === 'bank' ? item.account ?? null : null);
+      setActiveTab('add');
+      setError(null);
+    },
+    [buildExpenseFormValuesFromItem, reset, setActiveTab, setError, setSelectedAccount]
+  );
 
   const sourceSelection = watch('source');
 
@@ -161,37 +215,41 @@ function ExpensesPage() {
   const lockedCurrency = selectedAccount?.currency ?? null;
 
   const onSubmitExpense = async (values) => {
+    const isEditingExpense = Boolean(editingExpenseId);
     try {
       const accountId = values.source === 'bank' ? values.account_id || null : null;
       const accountDetails = values.source === 'bank' && selectedAccount && selectedAccount.id === accountId ? selectedAccount : null;
       const payloadCurrency = accountDetails?.currency ?? values.currency;
-      await apiFetch('/expenses', {
-        method: 'POST',
-        body: {
-          amount: Number(values.amount),
-          currency: payloadCurrency,
-          source: values.source,
-          account_id: accountId,
-          date: values.date,
-          category_id: values.category_id || null,
-          note: values.note || null
-        }
-      });
-      reset({
-        amount: '',
-        currency: 'NIO',
-        source: '',
-        account_id: '',
-        date: new Date().toISOString().slice(0, 10),
-        category_id: '',
-        note: ''
-      });
+      const payload = {
+        amount: Number(values.amount),
+        currency: payloadCurrency,
+        source: values.source,
+        account_id: accountId,
+        date: values.date,
+        category_id: values.category_id || null,
+        note: values.note || null
+      };
+
+      if (isEditingExpense) {
+        await apiFetch(`/expenses/${editingExpenseId}`, {
+          method: 'PUT',
+          body: payload
+        });
+      } else {
+        await apiFetch('/expenses', {
+          method: 'POST',
+          body: payload
+        });
+      }
+
+      reset(buildExpenseDefaultValues());
       setSelectedAccount(null);
+      setEditingExpenseId(null);
       await loadExpenses(filters);
       setActiveTab('list');
     } catch (err) {
       console.error(err);
-      const message = err.payload?.message ?? err.message ?? 'No se pudo registrar el gasto';
+      const message = err.payload?.message ?? err.message ?? (isEditingExpense ? 'No se pudo actualizar el gasto' : 'No se pudo registrar el gasto');
       setError(message);
     }
   };
@@ -391,12 +449,45 @@ function ExpensesPage() {
     });
   }, [monthsOverview]);
 
+  useEffect(() => {
+    if (!items.length) {
+      setCurrentPage(1);
+      return;
+    }
+
+    const total = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    setCurrentPage((prev) => {
+      if (!Number.isFinite(prev) || prev < 1) {
+        return 1;
+      }
+      if (prev > total) {
+        return total;
+      }
+      return prev;
+    });
+  }, [items]);
+
   const selectedMonthData = useMemo(() => {
     if (!selectedMonth) {
       return null;
     }
     return monthsOverview.find((entry) => entry.month === selectedMonth) ?? null;
   }, [monthsOverview, selectedMonth]);
+
+  const totalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  }, [items]);
+
+  const paginatedItems = useMemo(() => {
+    if (!items.length) {
+      return [];
+    }
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [currentPage, items]);
+
+  const showingFrom = items.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const showingTo = items.length ? Math.min(items.length, currentPage * PAGE_SIZE) : 0;
 
   const monthOptions = useMemo(
     () =>
@@ -407,13 +498,16 @@ function ExpensesPage() {
     [monthsOverview]
   );
 
-  const handleFilterInputChange = useCallback((event) => {
-    const { name, value } = event.target;
-    setFilters((prev) => ({ ...prev, [name]: value }));
-    if (name === 'from' || name === 'to') {
-      setSelectedMonth(null);
-    }
-  }, []);
+  const handleFilterInputChange = useCallback(
+    (event) => {
+      const { name, value } = event.target;
+      setFilters((prev) => ({ ...prev, [name]: value }));
+      if (name === 'from' || name === 'to') {
+        setSelectedMonth(null);
+      }
+    },
+    [setFilters, setSelectedMonth]
+  );
 
   const getMonthBounds = (monthKey) => {
     const [year, month] = monthKey.split('-');
@@ -436,8 +530,10 @@ function ExpensesPage() {
       setFilters(nextFilters);
       void loadExpenses(nextFilters);
     },
-    [filters.category_id, loadExpenses]
+    [filters.category_id, loadExpenses, setFilters]
   );
+
+  const isEditingExpense = Boolean(editingExpenseId);
 
   return (
     <section className="expenses">
@@ -454,7 +550,12 @@ function ExpensesPage() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  if (tab.id !== 'add' && editingExpenseId) {
+                    handleCancelEditExpense();
+                  }
+                  setActiveTab(tab.id);
+                }}
                 className={`expenses__tab ${activeTab === tab.id ? 'expenses__tab--active' : ''}`}
               >
                 <span aria-hidden>{tab.icon}</span>
@@ -502,47 +603,8 @@ function ExpensesPage() {
             </div>
           </header>
 
-          <section className={`expenses-monthly${monthsOverview.length > 0 ? ' expenses-monthly--with-summary' : ''}`}>
-            <div className="expenses-monthly__info">
-              {monthsOverview.length > 0 ? (
-                <>
-                  <h3>Totales por mes</h3>
-                  <p>Controla cuánto gastas cada mes y cuántos movimientos registraste.</p>
-                </>
-              ) : null}
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setSelectedMonth(null);
-                  void loadExpenses({ ...filters });
-                }}
-                className="expenses-filters"
-              >
-                <label className="expenses-field">
-                  <span>Desde</span>
-                  <input name="from" type="date" value={filters.from} onChange={handleFilterInputChange} className="expenses-input" />
-                </label>
-                <label className="expenses-field">
-                  <span>Hasta</span>
-                  <input name="to" type="date" value={filters.to} onChange={handleFilterInputChange} className="expenses-input" />
-                </label>
-                <label className="expenses-field">
-                  <span>Categoría</span>
-                  <select name="category_id" value={filters.category_id} onChange={handleFilterInputChange} className="expenses-input">
-                    <option value="">Todas</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="submit" className="expenses-button">
-                  Aplicar filtros
-                </button>
-              </form>
-            </div>
-            {monthsOverview.length > 0 ? (
+          {monthsOverview.length > 0 ? (
+            <section className="expenses-monthly">
               <div className="expenses-monthly__aside">
                 <label className="expenses-monthly__picker">
                   <span>Mes y año</span>
@@ -563,73 +625,135 @@ function ExpensesPage() {
                     ))}
                   </select>
                 </label>
+              </div>
+              <div className="expenses-monthly__summary">
                 {selectedMonthData ? (
-                  <article className="expenses-monthly__card expenses-monthly__card--focus">
-                    <div className="expenses-monthly__card-header">
-                      <h4>{selectedMonthData.label}</h4>
-                      <span className="expenses-monthly__hint">
-                        {selectedMonthData.count} {selectedMonthData.count === 1 ? 'movimiento' : 'movimientos'}
-                      </span>
+                  <div className="expenses-monthly-total">
+                    <span className="expenses-monthly-total__label">
+                      Total del mes seleccionado ({selectedMonthData.label})
+                    </span>
+                    <div className="expenses-monthly-total__values">
+                      <strong className="expenses-monthly-total__amount expenses-monthly-total__amount--nio">
+                        C${formatAmount(selectedMonthData.nio)}
+                      </strong>
+                      <strong className="expenses-monthly-total__amount">
+                        ${formatAmount(selectedMonthData.usd)} USD
+                      </strong>
                     </div>
-                    <p className="expenses-monthly__value expenses-monthly__value--nio">
-                      <span>NIO</span>
-                      <strong>C${formatAmount(selectedMonthData.nio)}</strong>
-                    </p>
-                    <p className="expenses-monthly__value">
-                      <span>USD</span>
-                      <strong>${formatAmount(selectedMonthData.usd)}</strong>
-                    </p>
-                  </article>
+                  </div>
                 ) : (
-                  <p className="expenses-card__placeholder expenses-monthly__placeholder">Selecciona un mes para ver el detalle.</p>
+                  <p className="expenses-card__placeholder expenses-monthly__placeholder">Selecciona un mes para ver el resumen.</p>
                 )}
               </div>
-            ) : null}
-          </section>
+            </section>
+          ) : null}
 
           {loading ? (
             <p className="expenses-card__placeholder">Cargando gastos...</p>
           ) : items.length === 0 ? (
             <p className="expenses-card__placeholder">No hay gastos registrados con los filtros actuales.</p>
           ) : (
-            <div className="expenses-table__wrapper">
-              <table className="expenses-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Monto</th>
-                    <th>Origen</th>
-                    <th>Categoría</th>
-                    <th>Nota</th>
-                    <th className="expenses-table__actions">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td>{formatDate(item.date)}</td>
-                      <td className="expenses-table__amount">
-                        {isNioCurrency(item.currency) ? 'C$' : '$'}
-                        {Number(item.amount).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td>
-                        {item.source === 'bank'
-                          ? formatAccountName(item.account) || 'Cuenta bancaria'
-                          : SOURCE_LABELS[item.source ?? 'cash']}
-                      </td>
-                      <td>{item.category_name ?? 'Sin categoría'}</td>
-                      <td className="expenses-table__note">{item.note ?? '-'}</td>
-                      <td className="expenses-table__actions">
-                        <button onClick={() => requestDeleteExpense(item)} className="expenses-table__delete">
-                          Eliminar
-                        </button>
-                      </td>
+            <>
+              <div className="expenses-table__wrapper">
+                <table className="expenses-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Monto</th>
+                      <th>Origen</th>
+                      <th>Categoría</th>
+                      <th>Nota</th>
+                      <th className="expenses-table__actions">Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {paginatedItems.map((item) => (
+                      <tr key={item.id}>
+                        <td>{formatDate(item.date)}</td>
+                        <td className="expenses-table__amount">
+                          {isNioCurrency(item.currency) ? 'C$' : '$'}
+                          {Number(item.amount).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td>
+                          {item.source === 'bank'
+                            ? formatAccountName(item.account) || 'Cuenta bancaria'
+                            : SOURCE_LABELS[item.source ?? 'cash']}
+                        </td>
+                        <td>{item.category_name ?? 'Sin categoría'}</td>
+                        <td className="expenses-table__note">{item.note ?? '-'}</td>
+                        <td className="expenses-table__actions">
+                          <button onClick={() => handleStartEditExpense(item)} className="expenses-table__edit">
+                            Editar
+                          </button>
+                          <button onClick={() => requestDeleteExpense(item)} className="expenses-table__delete">
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="expenses-pagination">
+                <span className="expenses-pagination__info">
+                  Mostrando {showingFrom}-{showingTo} de {items.length} gastos
+                </span>
+                <div className="expenses-pagination__controls">
+                  <button
+                    type="button"
+                    className="expenses-pagination__button"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Anterior
+                  </button>
+                  <span className="expenses-pagination__status">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="expenses-pagination__button"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages || !items.length}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </>
           )}
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSelectedMonth(null);
+              void loadExpenses({ ...filters });
+            }}
+            className="expenses-filters expenses-filters--footer"
+          >
+            <label className="expenses-field">
+              <span>Desde</span>
+              <input name="from" type="date" value={filters.from} onChange={handleFilterInputChange} className="expenses-input" />
+            </label>
+            <label className="expenses-field">
+              <span>Hasta</span>
+              <input name="to" type="date" value={filters.to} onChange={handleFilterInputChange} className="expenses-input" />
+            </label>
+            <label className="expenses-field">
+              <span>Categoría</span>
+              <select name="category_id" value={filters.category_id} onChange={handleFilterInputChange} className="expenses-input">
+                <option value="">Todas</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" className="expenses-button">
+              Aplicar filtros
+            </button>
+          </form>
         </article>
       ) : null}
 
@@ -637,8 +761,12 @@ function ExpensesPage() {
         <FormProvider {...expenseForm}>
           <form onSubmit={handleSubmit(onSubmitExpense)} className="expenses-card expenses-form">
             <div className="expenses-form__intro">
-              <h2>Registrar gasto</h2>
-              <p>Incluye gastos operativos, pagos recurrentes y compras puntuales.</p>
+              <h2>{isEditingExpense ? 'Editar gasto' : 'Registrar gasto'}</h2>
+              <p>
+                {isEditingExpense
+                  ? 'Actualiza la información del gasto seleccionado.'
+                  : 'Incluye gastos operativos, pagos recurrentes y compras puntuales.'}
+              </p>
             </div>
             <label className="expenses-field">
               <span>Monto</span>
@@ -682,13 +810,30 @@ function ExpensesPage() {
               <span>Nota</span>
               <textarea rows={3} placeholder="Describe el gasto" {...register('note')} className="expenses-textarea" />
             </label>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className={`expenses-button expenses-button--primary ${isSubmitting ? 'is-disabled' : ''}`}
-            >
-              {isSubmitting ? 'Guardando...' : 'Guardar gasto'}
-            </button>
+            <div className="expenses-form__actions">
+              <button type="submit" disabled={isSubmitting} className="expenses-button expenses-button--primary">
+                {isSubmitting
+                  ? isEditingExpense
+                    ? 'Guardando cambios...'
+                    : 'Guardando...'
+                  : isEditingExpense
+                    ? 'Actualizar gasto'
+                    : 'Guardar gasto'}
+              </button>
+              {isEditingExpense ? (
+                <button
+                  type="button"
+                  className="expenses-button expenses-button--ghost"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    handleCancelEditExpense();
+                    setActiveTab('list');
+                  }}
+                >
+                  Cancelar edición
+                </button>
+              ) : null}
+            </div>
           </form>
         </FormProvider>
       ) : null}

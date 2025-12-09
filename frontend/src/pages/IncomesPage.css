@@ -74,6 +74,14 @@
   box-shadow: 0 18px 36px rgba(111, 214, 255, 0.28);
 }
 
+  .incomes-table__actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: right;
+    white-space: nowrap;
+  }
 .incomes__tab:not(.incomes__tab--active):hover {
   border-color: rgba(111, 214, 255, 0.4);
   color: #ffffff;
@@ -106,6 +114,34 @@
     font-size: 0.95rem;
   }
 }
+  .incomes-table__edit,
+  .incomes-table__delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 96px;
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .incomes-table__edit {
+    border: 1px solid rgba(111, 214, 255, 0.35);
+    border-radius: 0.8rem;
+    padding: 0.48rem 1rem;
+    background: rgba(10, 28, 45, 0.75);
+    color: rgba(226, 244, 255, 0.9);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    box-shadow: 0 12px 26px rgba(7, 26, 43, 0.35);
+  }
+
+  .incomes-table__edit:hover {
+    border-color: rgba(111, 214, 255, 0.6);
+    background: rgba(10, 32, 52, 0.9);
+    transform: translateY(-1px);
+    box-shadow: 0 16px 32px rgba(7, 26, 43, 0.45);
+  }
+
 
 .incomes__error {
   margin: 0;
@@ -169,46 +205,20 @@
 
 
 
+
+
 .incomes-monthly {
   display: grid;
-  gap: 0.75rem;
+  gap: 1rem;
   margin-top: 0.2rem;
-}
-
-.incomes-monthly--with-summary {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: flex-start;
-}
-
-.incomes-monthly__info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  max-width: 620px;
-}
-
-.incomes-monthly__info h3 {
-  margin: 0;
-  color: #ffffff;
-}
-
-.incomes-monthly__info p {
-  margin: 0;
-  color: rgba(216, 244, 255, 0.72);
-  max-width: 520px;
-}
-
-.incomes-monthly__info .incomes-filters {
-  margin-top: 0.35rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  align-items: stretch;
 }
 
 .incomes-monthly__aside {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 0.75rem;
-  max-width: clamp(16rem, 25vw, 22rem);
-  justify-self: end;
 }
 
 .incomes-filters {
@@ -222,7 +232,6 @@
 .incomes-monthly__picker {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 0.35rem;
   font-size: 0.82rem;
   color: rgba(216, 244, 255, 0.7);
@@ -309,7 +318,112 @@
 
 .incomes-monthly__placeholder {
   margin: 0;
-  text-align: right;
+  color: rgba(216, 244, 255, 0.7);
+}
+
+.incomes-monthly__summary {
+  display: flex;
+  align-items: stretch;
+}
+
+.incomes-monthly__summary .incomes-monthly-total {
+  width: 100%;
+}
+
+.incomes-monthly-total {
+  margin-top: 1.2rem;
+  padding: 1rem 1.4rem;
+  border-radius: 1.1rem;
+  background: rgba(10, 28, 45, 0.82);
+  border: 1px solid rgba(111, 214, 255, 0.25);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.85rem;
+  align-items: baseline;
+}
+
+.incomes-monthly-total__label {
+  font-size: 0.92rem;
+  color: rgba(216, 244, 255, 0.8);
+  font-weight: 600;
+}
+
+.incomes-monthly-total__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.incomes-monthly-total__amount {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #6fd6ff;
+}
+
+.incomes-monthly-total__amount--nio {
+  color: #53fdd7;
+}
+
+.incomes-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.incomes-pagination__info {
+  color: rgba(216, 244, 255, 0.75);
+  font-size: 0.9rem;
+}
+
+.incomes-pagination__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.incomes-pagination__status {
+  color: rgba(216, 244, 255, 0.78);
+  font-weight: 600;
+}
+
+.incomes-pagination__button {
+  padding: 0.55rem 1.2rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(111, 214, 255, 0.25);
+  background: rgba(10, 24, 38, 0.6);
+  color: rgba(216, 244, 255, 0.88);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.incomes-pagination__button:hover:not(:disabled) {
+  border-color: rgba(111, 214, 255, 0.45);
+  box-shadow: 0 8px 18px rgba(7, 26, 43, 0.4);
+  transform: translateY(-1px);
+}
+
+.incomes-pagination__button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.incomes-filters--footer {
+  margin-top: 1.35rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid rgba(111, 214, 255, 0.14);
+  justify-content: flex-start;
+}
+
+.incomes-filters--footer .incomes-button {
+  align-self: flex-start;
 }
 
 @media (max-width: 1024px) {
@@ -317,21 +431,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .incomes-monthly__aside {
-    justify-self: stretch;
-    align-items: stretch;
-    max-width: none;
-  }
-
-  .incomes-monthly__picker {
-    align-items: flex-start;
-  }
-
-  .incomes-monthly__select {
-    width: 100%;
-  }
-
-  .incomes-monthly__card--focus {
+  .incomes-monthly__summary {
     width: 100%;
   }
 }
@@ -539,6 +639,65 @@
     width: 100%;
     text-align: center;
   }
+
+  .incomes-pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .incomes-pagination__controls {
+    justify-content: space-between;
+  }
+
+  .incomes-filters--footer {
+    flex-direction: column;
+  }
+
+  .incomes-filters--footer .incomes-button {
+    width: 100%;
+  }
+
+  .incomes-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .incomes-account-selector {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .incomes-field {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .incomes-account-selector .account-selector__field span,
+  .incomes-account-selector .account-selector__actions .account-selector__field span {
+    font-size: 0.82rem;
+  }
+
+  .incomes-account-selector select,
+  .incomes-account-selector .account-selector__input {
+    padding: 0.7rem 0.95rem;
+  }
+
+  .incomes-account-selector {
+    gap: 0.0rem;
+  }
+
+  .incomes-button {
+    padding: 0.7rem 1.1rem;
+    font-size: 0.95rem;
+  }
+
+  .incomes-form__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .incomes-form__actions .incomes-button,
+  .incomes-form .incomes-button {
+    width: 100%;
+  }
 }
 
 .incomes-button:hover {
@@ -581,6 +740,26 @@
 .incomes-form__intro p {
   margin: 0.3rem 0 0;
   color: rgba(216, 244, 255, 0.7);
+}
+
+.incomes-form__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.incomes-button--ghost {
+  background: rgba(10, 28, 45, 0.6);
+  border: 1px solid rgba(111, 214, 255, 0.35);
+  color: rgba(226, 244, 255, 0.88);
+  box-shadow: 0 12px 28px rgba(7, 26, 43, 0.28);
+}
+
+.incomes-button--ghost:hover {
+  border-color: rgba(111, 214, 255, 0.55);
+  background: rgba(10, 32, 52, 0.85);
 }
 
 .incomes-category {
@@ -634,8 +813,40 @@
 }
 
 .incomes-table__actions {
-  text-align: center;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: right;
   white-space: nowrap;
+}
+
+.incomes-table__edit,
+.incomes-table__delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.incomes-table__edit {
+  border: 1px solid rgba(111, 214, 255, 0.35);
+  border-radius: 0.8rem;
+  padding: 0.48rem 1rem;
+  background: rgba(10, 28, 45, 0.75);
+  color: rgba(226, 244, 255, 0.9);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: 0 12px 26px rgba(7, 26, 43, 0.35);
+}
+
+.incomes-table__edit:hover {
+  border-color: rgba(111, 214, 255, 0.6);
+  background: rgba(10, 32, 52, 0.9);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(7, 26, 43, 0.45);
 }
 
 .incomes-table__delete {

@@ -49,6 +49,8 @@ const SOURCE_LABELS = SOURCE_OPTIONS.reduce((acc, option) => {
   return acc;
 }, {});
 
+const PAGE_SIZE = 10;
+
 function IncomesPage() {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -69,6 +71,8 @@ function IncomesPage() {
   const [showCategoryDeleteConfirm, setShowCategoryDeleteConfirm] = useState(false);
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [editingIncomeId, setEditingIncomeId] = useState(null);
   const initialFetchDoneRef = useRef(false);
 
   const refreshCategories = useCallback(async () => {
@@ -82,8 +86,8 @@ function IncomesPage() {
     }
   }, []);
 
-  const incomeForm = useForm({
-    defaultValues: {
+  const buildIncomeDefaultValues = useCallback(
+    () => ({
       amount: '',
       currency: 'NIO',
       source: '',
@@ -91,7 +95,12 @@ function IncomesPage() {
       date: new Date().toISOString().slice(0, 10),
       category_id: '',
       note: ''
-    }
+    }),
+    []
+  );
+
+  const incomeForm = useForm({
+    defaultValues: buildIncomeDefaultValues()
   });
 
   const {
@@ -141,6 +150,7 @@ function IncomesPage() {
       setItems(incomesResponse ?? []);
       setCategories(categoriesResponse ?? []);
       setError(null);
+      setCurrentPage(1);
     } catch (err) {
       console.error(err);
       const message = err.payload?.message ?? err.message ?? 'No se pudieron cargar los ingresos';
@@ -159,38 +169,86 @@ function IncomesPage() {
     void loadIncomes(filters);
   }, [filters, loadIncomes]);
 
+  const buildIncomeFormValuesFromItem = useCallback(
+    (item) => {
+      const defaults = buildIncomeDefaultValues();
+      if (!item) {
+        return defaults;
+      }
+
+      return {
+        ...defaults,
+        amount: item.amount !== null && item.amount !== undefined ? `${item.amount}` : defaults.amount,
+        currency: item.currency ?? defaults.currency,
+        source: item.source ?? defaults.source,
+        account_id: item.source === 'bank' ? item.account_id ?? '' : '',
+        date: item.date ? item.date.slice(0, 10) : defaults.date,
+        category_id: item.category_id ? `${item.category_id}` : '',
+        note: item.note ?? ''
+      };
+    },
+    [buildIncomeDefaultValues]
+  );
+
+  const handleCancelEditIncome = useCallback(() => {
+    setEditingIncomeId(null);
+    setSelectedAccount(null);
+    reset(buildIncomeDefaultValues());
+    setError(null);
+  }, [buildIncomeDefaultValues, reset, setError]);
+
+  const handleStartEditIncome = useCallback(
+    (item) => {
+      if (!item) {
+        return;
+      }
+
+      setEditingIncomeId(item.id);
+      const nextValues = buildIncomeFormValuesFromItem(item);
+      reset(nextValues, { keepDirty: false, keepTouched: false });
+      setSelectedAccount(item.source === 'bank' ? item.account ?? null : null);
+      setActiveTab('add');
+      setError(null);
+    },
+    [buildIncomeFormValuesFromItem, reset, setActiveTab, setError, setSelectedAccount]
+  );
+
   const onSubmitIncome = async (values) => {
+    const isEditingIncome = Boolean(editingIncomeId);
     try {
       const accountId = values.source === 'bank' ? values.account_id || null : null;
       const accountDetails = values.source === 'bank' && selectedAccount && selectedAccount.id === accountId ? selectedAccount : null;
       const payloadCurrency = accountDetails?.currency ?? values.currency;
-      await apiFetch('/incomes', {
-        method: 'POST',
-        body: {
-          amount: Number(values.amount),
-          currency: payloadCurrency,
-          source: values.source,
-          account_id: accountId,
-          date: values.date,
-          category_id: values.category_id || null,
-          note: values.note ?? null
-        }
-      });
-      reset({
-        amount: '',
-        currency: 'NIO',
-        source: '',
-        account_id: '',
-        date: new Date().toISOString().slice(0, 10),
-        category_id: '',
-        note: ''
-      });
+      const payload = {
+        amount: Number(values.amount),
+        currency: payloadCurrency,
+        source: values.source,
+        account_id: accountId,
+        date: values.date,
+        category_id: values.category_id || null,
+        note: values.note ?? null
+      };
+
+      if (isEditingIncome) {
+        await apiFetch(`/incomes/${editingIncomeId}`, {
+          method: 'PUT',
+          body: payload
+        });
+      } else {
+        await apiFetch('/incomes', {
+          method: 'POST',
+          body: payload
+        });
+      }
+
+      reset(buildIncomeDefaultValues());
       setSelectedAccount(null);
+      setEditingIncomeId(null);
       await loadIncomes(filters);
       setActiveTab('list');
     } catch (err) {
       console.error(err);
-      const message = err.payload?.message ?? err.message ?? 'No se pudo registrar el ingreso';
+      const message = err.payload?.message ?? err.message ?? (isEditingIncome ? 'No se pudo actualizar el ingreso' : 'No se pudo registrar el ingreso');
       setError(message);
     }
   };
@@ -390,12 +448,45 @@ function IncomesPage() {
     });
   }, [monthsOverview]);
 
+  useEffect(() => {
+    if (!items.length) {
+      setCurrentPage(1);
+      return;
+    }
+
+    const total = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    setCurrentPage((prev) => {
+      if (!Number.isFinite(prev) || prev < 1) {
+        return 1;
+      }
+      if (prev > total) {
+        return total;
+      }
+      return prev;
+    });
+  }, [items]);
+
   const selectedMonthData = useMemo(() => {
     if (!selectedMonth) {
       return null;
     }
     return monthsOverview.find((entry) => entry.month === selectedMonth) ?? null;
   }, [monthsOverview, selectedMonth]);
+
+  const totalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  }, [items]);
+
+  const paginatedItems = useMemo(() => {
+    if (!items.length) {
+      return [];
+    }
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [currentPage, items]);
+
+  const showingFrom = items.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
+  const showingTo = items.length ? Math.min(items.length, currentPage * PAGE_SIZE) : 0;
 
   const monthOptions = useMemo(
     () =>
@@ -441,6 +532,8 @@ function IncomesPage() {
     [filters.category_id, loadIncomes, setFilters]
   );
 
+  const isEditingIncome = Boolean(editingIncomeId);
+
   return (
     <section className="incomes">
       <header className="incomes__header">
@@ -456,7 +549,12 @@ function IncomesPage() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  if (tab.id !== 'add' && editingIncomeId) {
+                    handleCancelEditIncome();
+                  }
+                  setActiveTab(tab.id);
+                }}
                 className={`incomes__tab ${activeTab === tab.id ? 'incomes__tab--active' : ''}`}
               >
                 <span aria-hidden>{tab.icon}</span>
@@ -504,47 +602,8 @@ function IncomesPage() {
             </div>
           </header>
 
-          <section className={`incomes-monthly${monthsOverview.length > 0 ? ' incomes-monthly--with-summary' : ''}`}>
-            <div className="incomes-monthly__info">
-              {monthsOverview.length > 0 ? (
-                <>
-                  <h3>Totales por mes</h3>
-                  <p>Consulta cómo evolucionan tus ingresos y cuántos movimientos registraste cada mes.</p>
-                </>
-              ) : null}
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setSelectedMonth(null);
-                  void loadIncomes({ ...filters });
-                }}
-                className="incomes-filters"
-              >
-                <label className="incomes-field">
-                  <span>Desde</span>
-                  <input name="from" type="date" value={filters.from} onChange={handleFilterInputChange} className="incomes-input" />
-                </label>
-                <label className="incomes-field">
-                  <span>Hasta</span>
-                  <input name="to" type="date" value={filters.to} onChange={handleFilterInputChange} className="incomes-input" />
-                </label>
-                <label className="incomes-field">
-                  <span>Categoría</span>
-                  <select name="category_id" value={filters.category_id} onChange={handleFilterInputChange} className="incomes-input">
-                    <option value="">Todas</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="submit" className="incomes-button">
-                  Aplicar filtros
-                </button>
-              </form>
-            </div>
-            {monthsOverview.length > 0 ? (
+          {monthsOverview.length > 0 ? (
+            <section className="incomes-monthly">
               <div className="incomes-monthly__aside">
                 <label className="incomes-monthly__picker">
                   <span>Mes y año</span>
@@ -565,73 +624,134 @@ function IncomesPage() {
                     ))}
                   </select>
                 </label>
+              </div>
+              <div className="incomes-monthly__summary">
                 {selectedMonthData ? (
-                  <article className="incomes-monthly__card incomes-monthly__card--focus">
-                    <div className="incomes-monthly__card-header">
-                      <h4>{selectedMonthData.label}</h4>
-                      <span className="incomes-monthly__hint">
-                        {selectedMonthData.count} {selectedMonthData.count === 1 ? 'movimiento' : 'movimientos'}
-                      </span>
+                  <div className="incomes-monthly-total">
+                    <span className="incomes-monthly-total__label">
+                      Total del mes seleccionado ({selectedMonthData.label})
+                    </span>
+                    <div className="incomes-monthly-total__values">
+                      <strong className="incomes-monthly-total__amount incomes-monthly-total__amount--nio">
+                        C${formatAmount(selectedMonthData.nio)}
+                      </strong>
+                      <strong className="incomes-monthly-total__amount">
+                        ${formatAmount(selectedMonthData.usd)} USD
+                      </strong>
                     </div>
-                    <p className="incomes-monthly__value incomes-monthly__value--nio">
-                      <span>NIO</span>
-                      <strong>C${formatAmount(selectedMonthData.nio)}</strong>
-                    </p>
-                    <p className="incomes-monthly__value">
-                      <span>USD</span>
-                      <strong>${formatAmount(selectedMonthData.usd)}</strong>
-                    </p>
-                  </article>
+                  </div>
                 ) : (
                   <p className="incomes-card__placeholder incomes-monthly__placeholder">Selecciona un mes para ver el resumen.</p>
                 )}
               </div>
-            ) : null}
-          </section>
+            </section>
+          ) : null}
 
           {loading ? (
             <p className="incomes-card__placeholder">Cargando ingresos...</p>
           ) : items.length === 0 ? (
             <p className="incomes-card__placeholder">No hay ingresos registrados con los filtros actuales.</p>
           ) : (
-            <div className="incomes-table__wrapper">
-              <table className="incomes-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Monto</th>
-                    <th>Origen</th>
-                    <th>Categoría</th>
-                    <th>Nota</th>
-                    <th className="incomes-table__actions">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td>{formatDate(item.date)}</td>
-                      <td className="incomes-table__amount">
-                        {isNioCurrency(item.currency) ? 'C$' : '$'}
-                        {Number(item.amount).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td>
-                        {item.source === 'bank'
-                          ? formatAccountName(item.account) || 'Cuenta bancaria'
-                          : SOURCE_LABELS[item.source ?? 'cash']}
-                      </td>
-                      <td>{item.category_name ?? 'Sin categoría'}</td>
-                      <td className="incomes-table__note">{item.note ?? '-'}</td>
-                      <td className="incomes-table__actions">
-                        <button onClick={() => requestDeleteIncome(item)} className="incomes-table__delete">
-                          Eliminar
-                        </button>
-                      </td>
+            <>
+              <div className="incomes-table__wrapper">
+                <table className="incomes-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Monto</th>
+                      <th>Origen</th>
+                      <th>Categoría</th>
+                      <th>Nota</th>
+                      <th className="incomes-table__actions">Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {paginatedItems.map((item) => (
+                      <tr key={item.id}>
+                        <td>{formatDate(item.date)}</td>
+                        <td className="incomes-table__amount">
+                          {isNioCurrency(item.currency) ? 'C$' : '$'}
+                          {Number(item.amount).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td>
+                          {item.source === 'bank'
+                            ? formatAccountName(item.account) || 'Cuenta bancaria'
+                            : SOURCE_LABELS[item.source ?? 'cash']}
+                        </td>
+                        <td>{item.category_name ?? 'Sin categoría'}</td>
+                        <td className="incomes-table__note">{item.note ?? '-'}</td>
+                        <td className="incomes-table__actions">
+                          <button onClick={() => handleStartEditIncome(item)} className="incomes-table__edit">
+                            Editar
+                          </button>
+                          <button onClick={() => requestDeleteIncome(item)} className="incomes-table__delete">
+                            Eliminar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="incomes-pagination">
+                <span className="incomes-pagination__info">
+                  Mostrando {showingFrom}-{showingTo} de {items.length} ingresos
+                </span>
+                <div className="incomes-pagination__controls">
+                  <button
+                    type="button"
+                    className="incomes-pagination__button"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Anterior
+                  </button>
+                  <span className="incomes-pagination__status">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="incomes-pagination__button"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages || !items.length}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </>
           )}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSelectedMonth(null);
+              void loadIncomes({ ...filters });
+            }}
+            className="incomes-filters incomes-filters--footer"
+          >
+            <label className="incomes-field">
+              <span>Desde</span>
+              <input name="from" type="date" value={filters.from} onChange={handleFilterInputChange} className="incomes-input" />
+            </label>
+            <label className="incomes-field">
+              <span>Hasta</span>
+              <input name="to" type="date" value={filters.to} onChange={handleFilterInputChange} className="incomes-input" />
+            </label>
+            <label className="incomes-field">
+              <span>Categoría</span>
+              <select name="category_id" value={filters.category_id} onChange={handleFilterInputChange} className="incomes-input">
+                <option value="">Todas</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" className="incomes-button">
+              Aplicar filtros
+            </button>
+          </form>
         </article>
       ) : null}
 
@@ -639,8 +759,12 @@ function IncomesPage() {
         <FormProvider {...incomeForm}>
           <form onSubmit={handleSubmit(onSubmitIncome)} className="incomes-card incomes-form">
             <div className="incomes-form__intro">
-              <h2>Registrar ingreso</h2>
-              <p>Completa el formulario para registrar un nuevo movimiento.</p>
+              <h2>{isEditingIncome ? 'Editar ingreso' : 'Registrar ingreso'}</h2>
+              <p>
+                {isEditingIncome
+                  ? 'Actualiza los datos del movimiento seleccionado.'
+                  : 'Completa el formulario para registrar un nuevo movimiento.'}
+              </p>
             </div>
             <label className="incomes-field">
               <span>Monto</span>
@@ -684,9 +808,30 @@ function IncomesPage() {
               <span>Nota</span>
               <textarea rows={3} placeholder="Detalles opcionales" {...register('note')} className="incomes-textarea" />
             </label>
-            <button type="submit" disabled={isSubmitting} className="incomes-button incomes-button--primary">
-              {isSubmitting ? 'Guardando...' : 'Guardar ingreso'}
-            </button>
+            <div className="incomes-form__actions">
+              <button type="submit" disabled={isSubmitting} className="incomes-button incomes-button--primary">
+                {isSubmitting
+                  ? isEditingIncome
+                    ? 'Guardando cambios...'
+                    : 'Guardando...'
+                  : isEditingIncome
+                    ? 'Actualizar ingreso'
+                    : 'Guardar ingreso'}
+              </button>
+              {isEditingIncome ? (
+                <button
+                  type="button"
+                  className="incomes-button incomes-button--ghost"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    handleCancelEditIncome();
+                    setActiveTab('list');
+                  }}
+                >
+                  Cancelar edición
+                </button>
+              ) : null}
+            </div>
           </form>
         </FormProvider>
       ) : null}

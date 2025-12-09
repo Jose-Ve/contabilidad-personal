@@ -542,25 +542,25 @@ function TransfersPage() {
                   <tbody>
                     {transfers.map((transfer) => (
                       <tr key={transfer.id}>
-                        <td>{formatDate(transfer.date)}</td>
-                        <td>
+                        <td data-label="Fecha">{formatDate(transfer.date)}</td>
+                        <td data-label="Origen">
                           <span className="transfers-table-label">{TYPE_LABELS[transfer.source_type] ?? transfer.source_type}</span>
                           {transfer.source_type === 'bank' && transfer.source_account ? (
                             <span className="transfers-table-account">{describeLocation(transfer.source_type, transfer.source_account)}</span>
                           ) : null}
                         </td>
-                        <td>
+                        <td data-label="Destino">
                           <span className="transfers-table-label">{TYPE_LABELS[transfer.destination_type] ?? transfer.destination_type}</span>
                           {transfer.destination_type === 'bank' && transfer.destination_account ? (
                             <span className="transfers-table-account">{describeLocation(transfer.destination_type, transfer.destination_account)}</span>
                           ) : null}
                         </td>
-                        <td className="transfers-table-amount">
+                        <td data-label="Monto" className="transfers-table-amount">
                           <strong>{formatAmount(transfer.amount)}</strong>
                           <span>{transfer.currency}</span>
                         </td>
-                        <td>{transfer.note || '—'}</td>
-                        <td className="transfers-table-actions">
+                        <td data-label="Nota">{transfer.note || '—'}</td>
+                        <td data-label="Acciones" className="transfers-table-actions">
                           <button type="button" onClick={() => handleStartEdit(transfer)}>
                             Editar
                           </button>

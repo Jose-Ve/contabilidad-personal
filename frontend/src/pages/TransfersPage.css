@@ -397,6 +397,14 @@
     justify-content: center;
   }
 
+  .transfers-selectors {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .transfers-account-selector {
+    padding: 1rem;
+  }
+
   .transfers-form {
     padding: 1.4rem;
   }
@@ -405,11 +413,70 @@
     padding: 1.2rem;
   }
 
+  .transfers-table-wrapper {
+    overflow-x: visible;
+  }
+
   .transfers-table {
     min-width: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .transfers-table thead {
+    display: none;
+  }
+
+  .transfers-table tbody {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .transfers-table tbody tr {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem 1.1rem;
+    border-radius: 1.2rem;
+    background: rgba(8, 20, 34, 0.85);
+    border: 1px solid rgba(111, 214, 255, 0.18);
+    box-shadow: 0 16px 28px rgba(7, 26, 43, 0.35);
+  }
+
+  .transfers-table tbody td {
+    padding: 0;
+    border: none;
+  }
+
+  .transfers-table tbody td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.2rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(111, 214, 255, 0.68);
+  }
+
+  .transfers-table-amount {
+    gap: 0.2rem;
   }
 
   .transfers-table-actions {
     flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .transfers-table-actions button {
+    width: 100%;
+  }
+
+  .transfers-form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .transfers-submit,
+  .transfers-cancel {
+    width: 100%;
   }
 }
